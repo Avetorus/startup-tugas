@@ -96,15 +96,12 @@ export async function registerRoutes(
 ): Promise<Server> {
   // Apply company context middleware to all /api routes
   app.use("/api", companyContextMiddleware);
-  
-  // Apply company access verification to company-scoped routes
-  app.use("/api/companies/:companyId", verifyCompanyAccess);
 
   // ============================================================================
   // COMPANY MANAGEMENT
   // ============================================================================
 
-  // Get all companies (for company switcher)
+  // Get all companies (for company switcher) - PUBLIC
   app.get("/api/companies", async (req: CompanyRequest, res) => {
     try {
       const companies = await storage.getCompanies();
@@ -114,7 +111,7 @@ export async function registerRoutes(
     }
   });
 
-  // Get company hierarchy
+  // Get company hierarchy - PUBLIC (must come before /:id route)
   app.get("/api/companies/hierarchy", async (req: CompanyRequest, res) => {
     try {
       const rootId = req.query.rootId as string | undefined;
@@ -125,7 +122,7 @@ export async function registerRoutes(
     }
   });
 
-  // Get single company
+  // Get single company (must come after /hierarchy)
   app.get("/api/companies/:id", async (req: CompanyRequest, res) => {
     try {
       const company = await storage.getCompany(req.params.id);
