@@ -16,9 +16,12 @@ import {
   type IntercompanyTransfer, type InsertIntercompanyTransfer,
   type JournalEntry, type InsertJournalEntry,
   type SharedAccess, type InsertSharedAccess,
+  type RefreshToken, type InsertRefreshToken,
+  type AuthAuditLog, type InsertAuthAuditLog,
   type CompanyContext, type CompanyHierarchyNode
 } from "@shared/schema";
 import { randomUUID } from "crypto";
+import bcrypt from "bcryptjs";
 
 // ============================================================================
 // STORAGE INTERFACE - MULTI-COMPANY SUPPORT
@@ -127,6 +130,20 @@ export interface IStorage {
   getSharedAccess(granteeCompanyId: string, entityType: string): Promise<SharedAccess[]>;
   grantSharedAccess(access: InsertSharedAccess): Promise<SharedAccess>;
   revokeSharedAccess(id: string): Promise<void>;
+  
+  // Refresh Tokens (for JWT auth)
+  createRefreshToken(token: InsertRefreshToken): Promise<RefreshToken>;
+  getRefreshTokenByHash(tokenHash: string): Promise<RefreshToken | undefined>;
+  revokeRefreshToken(id: string, reason: string): Promise<void>;
+  revokeAllUserRefreshTokens(userId: string, reason: string): Promise<void>;
+  
+  // Auth Audit Log
+  createAuthAuditLog(log: InsertAuthAuditLog): Promise<AuthAuditLog>;
+  getAuthAuditLogs(userId: string, limit?: number): Promise<AuthAuditLog[]>;
+  
+  // Additional methods for auth
+  getAllCompanies(): Promise<Company[]>;
+  getUserCompanyRole(userId: string, companyId: string): Promise<UserCompanyRole | undefined>;
 }
 
 // ============================================================================
@@ -150,6 +167,8 @@ export class MemStorage implements IStorage {
   private purchaseOrders: Map<string, PurchaseOrder>;
   private intercompanyTransfers: Map<string, IntercompanyTransfer>;
   private sharedAccess: Map<string, SharedAccess>;
+  private refreshTokens: Map<string, RefreshToken>;
+  private authAuditLogs: Map<string, AuthAuditLog>;
 
   constructor() {
     this.users = new Map();
@@ -168,6 +187,8 @@ export class MemStorage implements IStorage {
     this.purchaseOrders = new Map();
     this.intercompanyTransfers = new Map();
     this.sharedAccess = new Map();
+    this.refreshTokens = new Map();
+    this.authAuditLogs = new Map();
     
     // Initialize with default data
     this.initializeDefaultData();
@@ -356,11 +377,12 @@ export class MemStorage implements IStorage {
     this.companies.set(ukBranch.id, ukBranch);
     this.companies.set(asiaPacific.id, asiaPacific);
 
-    // Create default admin user
+    // Create default admin user with hashed password
+    const adminPasswordHash = bcrypt.hashSync("admin123", 10);
     const adminUser: User = {
       id: "user-admin",
       username: "admin",
-      password: "admin123", // In production, this would be hashed
+      password: adminPasswordHash,
       email: "admin@unanza.com",
       fullName: "System Administrator",
       avatarUrl: null,
@@ -372,6 +394,39 @@ export class MemStorage implements IStorage {
     };
 
     this.users.set(adminUser.id, adminUser);
+
+    // Create additional demo users
+    const managerPasswordHash = bcrypt.hashSync("password", 10);
+    const managerUser: User = {
+      id: "user-manager",
+      username: "john.manager",
+      password: managerPasswordHash,
+      email: "john.manager@unanza.com",
+      fullName: "John Manager",
+      avatarUrl: null,
+      defaultCompanyId: "comp-us",
+      isActive: true,
+      lastLoginAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.users.set(managerUser.id, managerUser);
+
+    const accountantPasswordHash = bcrypt.hashSync("password", 10);
+    const accountantUser: User = {
+      id: "user-accountant",
+      username: "jane.accountant",
+      password: accountantPasswordHash,
+      email: "jane.accountant@unanza.com",
+      fullName: "Jane Accountant",
+      avatarUrl: null,
+      defaultCompanyId: "comp-eu",
+      isActive: true,
+      lastLoginAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.users.set(accountantUser.id, accountantUser);
 
     // Assign admin to all companies
     const companiesArr = [holdingCompany, usSubsidiary, euSubsidiary, ukBranch, asiaPacific];
@@ -389,6 +444,34 @@ export class MemStorage implements IStorage {
       };
       this.userCompanyRoles.set(assignment.id, assignment);
     });
+
+    // Assign manager to US subsidiary
+    const managerAssignment: UserCompanyRole = {
+      id: "ucr-manager-comp-us",
+      userId: managerUser.id,
+      companyId: usSubsidiary.id,
+      roleId: managerRole.id,
+      isDefault: true,
+      grantedAt: new Date(),
+      grantedBy: adminUser.id,
+      expiresAt: null,
+      isActive: true,
+    };
+    this.userCompanyRoles.set(managerAssignment.id, managerAssignment);
+
+    // Assign accountant to EU subsidiary with user role
+    const accountantAssignment: UserCompanyRole = {
+      id: "ucr-accountant-comp-eu",
+      userId: accountantUser.id,
+      companyId: euSubsidiary.id,
+      roleId: userRole.id,
+      isDefault: true,
+      grantedAt: new Date(),
+      grantedBy: adminUser.id,
+      expiresAt: null,
+      isActive: true,
+    };
+    this.userCompanyRoles.set(accountantAssignment.id, accountantAssignment);
   }
 
   // ===================== USERS =====================
@@ -404,10 +487,11 @@ export class MemStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = randomUUID();
+    const hashedPassword = bcrypt.hashSync(insertUser.password, 10);
     const user: User = { 
       id,
       username: insertUser.username,
-      password: insertUser.password,
+      password: hashedPassword,
       email: insertUser.email ?? null,
       fullName: insertUser.fullName ?? null,
       avatarUrl: null,
@@ -1296,6 +1380,88 @@ export class MemStorage implements IStorage {
 
   async revokeSharedAccess(id: string): Promise<void> {
     this.sharedAccess.delete(id);
+  }
+
+  // ===================== REFRESH TOKENS (JWT AUTH) =====================
+  async createRefreshToken(token: InsertRefreshToken): Promise<RefreshToken> {
+    const id = randomUUID();
+    const newToken: RefreshToken = {
+      id,
+      userId: token.userId,
+      tokenHash: token.tokenHash,
+      activeCompanyId: token.activeCompanyId ?? null,
+      deviceInfo: token.deviceInfo ?? null,
+      ipAddress: token.ipAddress ?? null,
+      issuedAt: new Date(),
+      expiresAt: token.expiresAt,
+      revokedAt: null,
+      revokedReason: null,
+      tokenVersion: token.tokenVersion ?? 1,
+    };
+    this.refreshTokens.set(id, newToken);
+    return newToken;
+  }
+
+  async getRefreshTokenByHash(tokenHash: string): Promise<RefreshToken | undefined> {
+    return Array.from(this.refreshTokens.values()).find(t => t.tokenHash === tokenHash);
+  }
+
+  async revokeRefreshToken(id: string, reason: string): Promise<void> {
+    const token = this.refreshTokens.get(id);
+    if (token) {
+      token.revokedAt = new Date();
+      token.revokedReason = reason;
+      this.refreshTokens.set(id, token);
+    }
+  }
+
+  async revokeAllUserRefreshTokens(userId: string, reason: string): Promise<void> {
+    const now = new Date();
+    const entries = Array.from(this.refreshTokens.entries());
+    for (const [id, token] of entries) {
+      if (token.userId === userId && !token.revokedAt) {
+        token.revokedAt = now;
+        token.revokedReason = reason;
+        this.refreshTokens.set(id, token);
+      }
+    }
+  }
+
+  // ===================== AUTH AUDIT LOG =====================
+  async createAuthAuditLog(log: InsertAuthAuditLog): Promise<AuthAuditLog> {
+    const id = randomUUID();
+    const newLog: AuthAuditLog = {
+      id,
+      userId: log.userId ?? null,
+      eventType: log.eventType,
+      companyId: log.companyId ?? null,
+      ipAddress: log.ipAddress ?? null,
+      deviceInfo: log.deviceInfo ?? null,
+      success: log.success ?? true,
+      failureReason: log.failureReason ?? null,
+      metadata: log.metadata ?? null,
+      createdAt: new Date(),
+    };
+    this.authAuditLogs.set(id, newLog);
+    return newLog;
+  }
+
+  async getAuthAuditLogs(userId: string, limit: number = 100): Promise<AuthAuditLog[]> {
+    return Array.from(this.authAuditLogs.values())
+      .filter(l => l.userId === userId)
+      .sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0))
+      .slice(0, limit);
+  }
+
+  // ===================== ADDITIONAL AUTH METHODS =====================
+  async getAllCompanies(): Promise<Company[]> {
+    return Array.from(this.companies.values());
+  }
+
+  async getUserCompanyRole(userId: string, companyId: string): Promise<UserCompanyRole | undefined> {
+    return Array.from(this.userCompanyRoles.values()).find(
+      ucr => ucr.userId === userId && ucr.companyId === companyId && ucr.isActive
+    );
   }
 }
 

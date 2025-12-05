@@ -144,6 +144,47 @@ export const userCompanyRoles = pgTable("user_company_roles", {
 }));
 
 // ============================================================================
+// AUTHENTICATION - JWT & REFRESH TOKENS
+// ============================================================================
+
+// Refresh tokens for JWT authentication
+export const refreshTokens = pgTable("refresh_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  tokenHash: text("token_hash").notNull().unique(), // Hashed refresh token
+  activeCompanyId: varchar("active_company_id").references(() => companies.id),
+  deviceInfo: text("device_info"), // User agent or device identifier
+  ipAddress: varchar("ip_address", { length: 45 }), // IPv4 or IPv6
+  issuedAt: timestamp("issued_at").defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(),
+  revokedAt: timestamp("revoked_at"), // Null if not revoked
+  revokedReason: varchar("revoked_reason", { length: 100 }), // logout, rotation, security
+  tokenVersion: integer("token_version").default(1), // For token rotation
+}, (table) => ({
+  userIdx: index("refresh_tokens_user_idx").on(table.userId),
+  tokenHashIdx: index("refresh_tokens_hash_idx").on(table.tokenHash),
+  expiresIdx: index("refresh_tokens_expires_idx").on(table.expiresAt),
+}));
+
+// Audit log for authentication events
+export const authAuditLog = pgTable("auth_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  eventType: varchar("event_type", { length: 50 }).notNull(), // login, logout, refresh, failed_login, token_revoked
+  companyId: varchar("company_id").references(() => companies.id),
+  ipAddress: varchar("ip_address", { length: 45 }),
+  deviceInfo: text("device_info"),
+  success: boolean("success").default(true),
+  failureReason: text("failure_reason"),
+  metadata: jsonb("metadata"), // Additional context
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  userIdx: index("auth_audit_user_idx").on(table.userId),
+  eventTypeIdx: index("auth_audit_event_idx").on(table.eventType),
+  createdIdx: index("auth_audit_created_idx").on(table.createdAt),
+}));
+
+// ============================================================================
 // MASTER DATA - COMPANY SCOPED
 // ============================================================================
 
@@ -535,6 +576,22 @@ export const insertUserCompanyRoleSchema = createInsertSchema(userCompanyRoles).
 export type InsertUserCompanyRole = z.infer<typeof insertUserCompanyRoleSchema>;
 export type UserCompanyRole = typeof userCompanyRoles.$inferSelect;
 
+// Refresh Token schemas
+export const insertRefreshTokenSchema = createInsertSchema(refreshTokens).omit({
+  id: true,
+  issuedAt: true,
+});
+export type InsertRefreshToken = z.infer<typeof insertRefreshTokenSchema>;
+export type RefreshToken = typeof refreshTokens.$inferSelect;
+
+// Auth Audit Log schemas
+export const insertAuthAuditLogSchema = createInsertSchema(authAuditLog).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertAuthAuditLog = z.infer<typeof insertAuthAuditLogSchema>;
+export type AuthAuditLog = typeof authAuditLog.$inferSelect;
+
 // Chart of Accounts schemas
 export const insertAccountSchema = createInsertSchema(chartOfAccounts).omit({
   id: true,
@@ -707,3 +764,97 @@ export function getLevelForCompanyType(type: string): CompanyLevel {
     default: throw new Error(`Invalid company type: ${type}. Must be holding, subsidiary, or branch`);
   }
 }
+
+// ============================================================================
+// JWT AUTHENTICATION TYPES
+// ============================================================================
+
+// JWT Access Token Payload (short-lived, 15 min)
+export interface JWTAccessTokenPayload {
+  userId: string;
+  username: string;
+  activeCompanyId: string;
+  roleId: string | null;
+  allowedCompanyIds: string[]; // Hierarchy-derived accessible companies
+  companyLevel: CompanyLevel;
+  permissions: string[];
+  iat?: number;  // Issued at
+  exp?: number;  // Expiration
+  jti?: string;  // JWT ID for tracking
+}
+
+// JWT Refresh Token Payload (long-lived, 7 days)
+export interface JWTRefreshTokenPayload {
+  userId: string;
+  tokenId: string; // Links to refreshTokens table
+  tokenVersion: number; // For rotation
+  iat?: number;
+  exp?: number;
+}
+
+// Auth request context attached to Express request
+export interface AuthContext {
+  user: User;
+  role: Role | null;
+  activeCompanyId: string;
+  activeCompany: Company;
+  allowedCompanyIds: string[]; // Hierarchy-derived
+  companyLevel: CompanyLevel;
+  permissions: string[];
+  canConsolidate: boolean;
+  isAuthenticated: true;
+}
+
+// Login request schema
+export const loginSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required"),
+  companyId: z.string().optional(), // Optional: specific company to log into
+});
+export type LoginRequest = z.infer<typeof loginSchema>;
+
+// Login response
+export interface LoginResponse {
+  accessToken: string;
+  expiresIn: number; // seconds
+  user: {
+    id: string;
+    username: string;
+    email: string | null;
+    fullName: string | null;
+  };
+  activeCompany: {
+    id: string;
+    code: string;
+    name: string;
+    companyType: string;
+    level: number;
+  };
+  role: {
+    id: string;
+    name: string;
+    permissions: string[];
+  } | null;
+  allowedCompanyIds: string[];
+  companyLevel: CompanyLevel;
+  canConsolidate: boolean;
+}
+
+// Token refresh response
+export interface RefreshResponse {
+  accessToken: string;
+  expiresIn: number;
+}
+
+// Auth event types for audit logging
+export const AUTH_EVENTS = {
+  LOGIN: "login",
+  LOGIN_FAILED: "login_failed",
+  LOGOUT: "logout",
+  REFRESH: "refresh",
+  REFRESH_FAILED: "refresh_failed",
+  TOKEN_REVOKED: "token_revoked",
+  COMPANY_SWITCHED: "company_switched",
+  PASSWORD_CHANGED: "password_changed",
+} as const;
+export type AuthEventType = typeof AUTH_EVENTS[keyof typeof AUTH_EVENTS];

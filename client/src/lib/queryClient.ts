@@ -1,17 +1,15 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
-const STORAGE_KEY_COMPANY = "unanza_active_company";
-const STORAGE_KEY_USER = "unanza_user_id";
-const DEFAULT_USER_ID = "user-admin";
-const DEFAULT_COMPANY_ID = "comp-holding";
+const TOKEN_STORAGE_KEY = "unanza_access_token";
 
-function getCompanyHeaders(): Record<string, string> {
-  const userId = localStorage.getItem(STORAGE_KEY_USER) || DEFAULT_USER_ID;
-  const companyId = localStorage.getItem(STORAGE_KEY_COMPANY) || DEFAULT_COMPANY_ID;
-  return {
-    "x-user-id": userId,
-    "x-company-id": companyId,
-  };
+function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+  if (token) {
+    return {
+      "Authorization": `Bearer ${token}`,
+    };
+  }
+  return {};
 }
 
 async function throwIfResNotOk(res: Response) {
@@ -27,7 +25,7 @@ export async function apiRequest(
   data?: unknown | undefined,
 ): Promise<Response> {
   const headers: Record<string, string> = {
-    ...getCompanyHeaders(),
+    ...getAuthHeaders(),
   };
   
   if (data) {
@@ -51,8 +49,10 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey, meta }) => {
-    // Use custom headers from meta if provided, otherwise use company headers
-    const headers: Record<string, string> = meta?.headers as Record<string, string> || getCompanyHeaders();
+    const headers: Record<string, string> = {
+      ...getAuthHeaders(),
+      ...(meta?.headers as Record<string, string> || {}),
+    };
     
     const res = await fetch(queryKey.join("/") as string, {
       credentials: "include",

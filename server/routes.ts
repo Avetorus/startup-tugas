@@ -11,11 +11,21 @@ import {
   insertVendorSchema,
   insertTaxSchema,
   insertFiscalPeriodSchema,
+  loginSchema,
   type CompanyContext,
   type Account,
   type CompanyHierarchyNode,
 } from "@shared/schema";
 import { z } from "zod";
+import {
+  authenticateUser,
+  refreshAccessToken,
+  logout,
+  switchCompany,
+  authenticateJWT,
+  loadAuthContext,
+  AUTH_CONFIG,
+} from "./auth";
 
 // Middleware to extract company context from headers
 interface CompanyRequest extends Request {
@@ -24,13 +34,13 @@ interface CompanyRequest extends Request {
   userId?: string;
 }
 
-// Public routes that don't require company context
+// Public routes that don't require authentication
+// Note: These paths are relative to the /api mount point
+// Only auth endpoints are truly public - all others require JWT
 const publicRoutes = [
-  "/api/companies",
-  "/api/companies/hierarchy", 
-  "/api/session/context",
-  "/api/session/switch-company",
-  "/api/roles",
+  "/auth/login",
+  "/auth/refresh",
+  "/auth/logout",
 ];
 
 async function companyContextMiddleware(
@@ -38,35 +48,38 @@ async function companyContextMiddleware(
   res: Response, 
   next: NextFunction
 ) {
-  const userId = req.headers["x-user-id"] as string;
-  const companyId = req.headers["x-company-id"] as string;
-
-  // Check if this is a public route (allow without auth for demo)
+  // Check if this is a public route (allow without auth)
   const isPublicRoute = publicRoutes.some(route => 
     req.path === route || req.path.startsWith(route + "/")
   );
 
-  if (userId && companyId) {
-    const context = await storage.getCompanyContext(userId, companyId);
-    if (context) {
-      req.companyContext = context;
-      req.activeCompanyId = companyId;
-      req.userId = userId;
-    } else if (!isPublicRoute) {
-      return res.status(403).json({ 
-        error: "Access denied: User does not have access to this company" 
-      });
-    }
-  } else if (!isPublicRoute) {
-    // For demo purposes, set default user context if not provided
-    // In production, this would return 401
-    const defaultContext = await storage.getCompanyContext("user-admin", "comp-holding");
-    if (defaultContext) {
-      req.companyContext = defaultContext;
-      req.activeCompanyId = "comp-holding";
-      req.userId = "user-admin";
-    }
+  // Public routes don't require authentication
+  if (isPublicRoute) {
+    return next();
   }
+
+  // All non-public routes require JWT authentication (via req.auth)
+  if (!req.auth) {
+    return res.status(401).json({ 
+      error: "Authentication required. Please login." 
+    });
+  }
+
+  // Build company context from JWT claims
+  req.companyContext = {
+    activeCompanyId: req.auth.activeCompanyId,
+    activeCompany: req.auth.activeCompany,
+    userCompanies: [req.auth.activeCompany],
+    permissions: req.auth.role?.permissions || [],
+    role: req.auth.role,
+    companyLevel: req.auth.companyLevel,
+    accessibleCompanyIds: req.auth.allowedCompanyIds,
+    canConsolidate: req.auth.canConsolidate,
+    parentCompany: null,
+    childCompanies: [],
+  };
+  req.activeCompanyId = req.auth.activeCompanyId;
+  req.userId = req.auth.user.id;
   next();
 }
 
@@ -98,12 +111,207 @@ function verifyCompanyAccess(
   next();
 }
 
+// JWT middleware wrapper that skips for public routes
+function optionalJWT(req: Request, res: Response, next: NextFunction) {
+  const isPublicRoute = publicRoutes.some(route => 
+    req.path === route || req.path.startsWith(route + "/")
+  );
+  
+  if (isPublicRoute) {
+    return next();
+  }
+  
+  // Apply JWT authentication for non-public routes
+  authenticateJWT(req, res, (err?: any) => {
+    if (err) return next(err);
+    loadAuthContext(req, res, next);
+  });
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Apply company context middleware to all /api routes
-  app.use("/api", companyContextMiddleware);
+  // Apply JWT authentication + company context middleware to all /api routes
+  app.use("/api", optionalJWT, companyContextMiddleware);
+
+  // ============================================================================
+  // AUTHENTICATION (JWT)
+  // ============================================================================
+
+  // Login - Get access token + refresh token
+  app.post("/api/auth/login", async (req: Request, res: Response) => {
+    try {
+      const parsed = loginSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid credentials format", details: parsed.error.errors });
+      }
+
+      const { username, password, companyId } = parsed.data;
+      const ipAddress = req.ip || req.socket.remoteAddress;
+      const deviceInfo = req.headers["user-agent"];
+
+      const result = await authenticateUser(username, password, companyId, ipAddress, deviceInfo);
+
+      if (!result.success) {
+        return res.status(401).json({ error: result.error });
+      }
+
+      // Set refresh token in httpOnly cookie
+      res.cookie(AUTH_CONFIG.REFRESH_TOKEN_COOKIE_NAME, result.refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: AUTH_CONFIG.REFRESH_TOKEN_EXPIRES_IN * 1000,
+        path: "/",
+      });
+
+      res.json(result.loginResponse);
+    } catch (error) {
+      console.error("Login error:", error);
+      res.status(500).json({ error: "Authentication failed" });
+    }
+  });
+
+  // Refresh access token
+  app.post("/api/auth/refresh", async (req: Request, res: Response) => {
+    try {
+      const refreshToken = req.cookies?.[AUTH_CONFIG.REFRESH_TOKEN_COOKIE_NAME] || req.body.refreshToken;
+
+      if (!refreshToken) {
+        return res.status(401).json({ error: "No refresh token provided" });
+      }
+
+      const ipAddress = req.ip || req.socket.remoteAddress;
+      const deviceInfo = req.headers["user-agent"];
+
+      const result = await refreshAccessToken(refreshToken, ipAddress, deviceInfo);
+
+      if (!result.success) {
+        // Clear invalid cookie
+        res.clearCookie(AUTH_CONFIG.REFRESH_TOKEN_COOKIE_NAME);
+        return res.status(401).json({ error: result.error });
+      }
+
+      // Set new refresh token in cookie (rotation)
+      if (result.newRefreshToken) {
+        res.cookie(AUTH_CONFIG.REFRESH_TOKEN_COOKIE_NAME, result.newRefreshToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          maxAge: AUTH_CONFIG.REFRESH_TOKEN_EXPIRES_IN * 1000,
+          path: "/",
+        });
+      }
+
+      res.json(result.response);
+    } catch (error) {
+      console.error("Refresh error:", error);
+      res.status(500).json({ error: "Token refresh failed" });
+    }
+  });
+
+  // Logout - Revoke refresh token
+  app.post("/api/auth/logout", async (req: Request, res: Response) => {
+    try {
+      const refreshToken = req.cookies?.[AUTH_CONFIG.REFRESH_TOKEN_COOKIE_NAME] || req.body.refreshToken;
+
+      if (refreshToken) {
+        const ipAddress = req.ip || req.socket.remoteAddress;
+        const deviceInfo = req.headers["user-agent"];
+        await logout(refreshToken, ipAddress, deviceInfo);
+      }
+
+      // Clear cookie
+      res.clearCookie(AUTH_CONFIG.REFRESH_TOKEN_COOKIE_NAME);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Logout error:", error);
+      res.status(500).json({ error: "Logout failed" });
+    }
+  });
+
+  // Get current user info (requires valid JWT)
+  app.get("/api/auth/me", authenticateJWT, loadAuthContext, async (req: Request, res: Response) => {
+    try {
+      const auth = req.auth;
+      if (!auth) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+
+      res.json({
+        user: {
+          id: auth.user.id,
+          username: auth.user.username,
+          email: auth.user.email,
+          fullName: auth.user.fullName,
+        },
+        activeCompany: {
+          id: auth.activeCompany.id,
+          code: auth.activeCompany.code,
+          name: auth.activeCompany.name,
+          companyType: auth.activeCompany.companyType,
+          level: auth.activeCompany.level,
+        },
+        role: auth.role ? {
+          id: auth.role.id,
+          name: auth.role.name,
+          permissions: auth.role.permissions,
+        } : null,
+        allowedCompanyIds: auth.allowedCompanyIds,
+        companyLevel: auth.companyLevel,
+        canConsolidate: auth.canConsolidate,
+      });
+    } catch (error) {
+      console.error("Get user error:", error);
+      res.status(500).json({ error: "Failed to get user info" });
+    }
+  });
+
+  // Switch company (requires valid JWT)
+  app.post("/api/auth/switch-company", authenticateJWT, loadAuthContext, async (req: Request, res: Response) => {
+    try {
+      const auth = req.auth;
+      if (!auth) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+
+      const { companyId } = req.body;
+      if (!companyId) {
+        return res.status(400).json({ error: "Company ID is required" });
+      }
+
+      const refreshToken = req.cookies?.[AUTH_CONFIG.REFRESH_TOKEN_COOKIE_NAME];
+      if (!refreshToken) {
+        return res.status(401).json({ error: "Refresh token required for company switch" });
+      }
+
+      const ipAddress = req.ip || req.socket.remoteAddress;
+      const deviceInfo = req.headers["user-agent"];
+
+      const result = await switchCompany(auth.user.id, companyId, refreshToken, ipAddress, deviceInfo);
+
+      if (!result.success) {
+        return res.status(403).json({ error: result.error });
+      }
+
+      // Set new refresh token
+      if (result.refreshToken) {
+        res.cookie(AUTH_CONFIG.REFRESH_TOKEN_COOKIE_NAME, result.refreshToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          maxAge: AUTH_CONFIG.REFRESH_TOKEN_EXPIRES_IN * 1000,
+          path: "/",
+        });
+      }
+
+      res.json(result.loginResponse);
+    } catch (error) {
+      console.error("Switch company error:", error);
+      res.status(500).json({ error: "Failed to switch company" });
+    }
+  });
 
   // ============================================================================
   // COMPANY MANAGEMENT
