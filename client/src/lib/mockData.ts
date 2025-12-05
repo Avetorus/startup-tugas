@@ -75,15 +75,180 @@ export const mockAttendance = [
   { id: "ATT-005", employeeId: "E005", employeeName: "Lisa Wang", date: "2024-12-05", checkIn: null, checkOut: null, hours: 0, status: "on-leave" },
 ];
 
-export const mockAccounts = [
-  { id: "1000", name: "Cash", type: "asset", balance: 125000, parent: null },
-  { id: "1100", name: "Accounts Receivable", type: "asset", balance: 45600, parent: null },
-  { id: "1200", name: "Inventory", type: "asset", balance: 234500, parent: null },
-  { id: "2000", name: "Accounts Payable", type: "liability", balance: 28900, parent: null },
-  { id: "3000", name: "Owner's Equity", type: "equity", balance: 350000, parent: null },
-  { id: "4000", name: "Sales Revenue", type: "revenue", balance: 567800, parent: null },
-  { id: "5000", name: "Cost of Goods Sold", type: "expense", balance: 234000, parent: null },
-  { id: "5100", name: "Operating Expenses", type: "expense", balance: 89000, parent: null },
+// todo: remove mock functionality - Complete Chart of Accounts with hierarchy
+export interface ChartOfAccountsEntry {
+  id: string;
+  name: string;
+  type: "asset" | "liability" | "equity" | "revenue" | "expense";
+  level: 1 | 2 | 3;
+  parentId: string | null;
+  balance: number;
+  isPostable: boolean;
+}
+
+export const mockAccounts: ChartOfAccountsEntry[] = [
+  // ASSETS (1000-1999)
+  { id: "1000", name: "Assets", type: "asset", level: 1, parentId: null, balance: 0, isPostable: false },
+  
+  // Current Assets (1100-1199)
+  { id: "1100", name: "Current Assets", type: "asset", level: 2, parentId: "1000", balance: 0, isPostable: false },
+  
+  // Cash & Bank (1110-1119)
+  { id: "1110", name: "Cash & Bank", type: "asset", level: 2, parentId: "1100", balance: 0, isPostable: false },
+  { id: "1111", name: "Cash on Hand", type: "asset", level: 3, parentId: "1110", balance: 15000, isPostable: true },
+  { id: "1112", name: "Petty Cash", type: "asset", level: 3, parentId: "1110", balance: 2500, isPostable: true },
+  { id: "1113", name: "Checking Account - Main", type: "asset", level: 3, parentId: "1110", balance: 85000, isPostable: true },
+  { id: "1114", name: "Savings Account", type: "asset", level: 3, parentId: "1110", balance: 45000, isPostable: true },
+  { id: "1115", name: "Money Market Account", type: "asset", level: 3, parentId: "1110", balance: 25000, isPostable: true },
+  
+  // Accounts Receivable (1120-1129)
+  { id: "1120", name: "Accounts Receivable", type: "asset", level: 2, parentId: "1100", balance: 0, isPostable: false },
+  { id: "1121", name: "Trade Receivables", type: "asset", level: 3, parentId: "1120", balance: 45600, isPostable: true },
+  { id: "1122", name: "Employee Receivables", type: "asset", level: 3, parentId: "1120", balance: 3200, isPostable: true },
+  { id: "1123", name: "Allowance for Doubtful Accounts", type: "asset", level: 3, parentId: "1120", balance: -2500, isPostable: true },
+  { id: "1124", name: "Notes Receivable - Short Term", type: "asset", level: 3, parentId: "1120", balance: 12000, isPostable: true },
+  
+  // Inventory (1130-1139)
+  { id: "1130", name: "Inventory", type: "asset", level: 2, parentId: "1100", balance: 0, isPostable: false },
+  { id: "1131", name: "Raw Materials", type: "asset", level: 3, parentId: "1130", balance: 78500, isPostable: true },
+  { id: "1132", name: "Work in Progress", type: "asset", level: 3, parentId: "1130", balance: 45000, isPostable: true },
+  { id: "1133", name: "Finished Goods", type: "asset", level: 3, parentId: "1130", balance: 98000, isPostable: true },
+  { id: "1134", name: "Merchandise Inventory", type: "asset", level: 3, parentId: "1130", balance: 67000, isPostable: true },
+  { id: "1135", name: "Inventory Reserve", type: "asset", level: 3, parentId: "1130", balance: -5000, isPostable: true },
+  
+  // Other Current Assets (1140-1149)
+  { id: "1140", name: "Other Current Assets", type: "asset", level: 2, parentId: "1100", balance: 0, isPostable: false },
+  { id: "1141", name: "Prepaid Insurance", type: "asset", level: 3, parentId: "1140", balance: 8500, isPostable: true },
+  { id: "1142", name: "Prepaid Rent", type: "asset", level: 3, parentId: "1140", balance: 12000, isPostable: true },
+  { id: "1143", name: "Prepaid Expenses - Other", type: "asset", level: 3, parentId: "1140", balance: 4500, isPostable: true },
+  
+  // Fixed Assets (1200-1299)
+  { id: "1200", name: "Fixed Assets", type: "asset", level: 2, parentId: "1000", balance: 0, isPostable: false },
+  { id: "1210", name: "Land", type: "asset", level: 3, parentId: "1200", balance: 150000, isPostable: true },
+  { id: "1220", name: "Buildings", type: "asset", level: 3, parentId: "1200", balance: 450000, isPostable: true },
+  { id: "1221", name: "Accumulated Depreciation - Buildings", type: "asset", level: 3, parentId: "1200", balance: -95000, isPostable: true },
+  { id: "1230", name: "Machinery & Equipment", type: "asset", level: 3, parentId: "1200", balance: 285000, isPostable: true },
+  { id: "1231", name: "Accumulated Depreciation - Machinery", type: "asset", level: 3, parentId: "1200", balance: -78000, isPostable: true },
+  { id: "1240", name: "Vehicles", type: "asset", level: 3, parentId: "1200", balance: 125000, isPostable: true },
+  { id: "1241", name: "Accumulated Depreciation - Vehicles", type: "asset", level: 3, parentId: "1200", balance: -45000, isPostable: true },
+  { id: "1250", name: "Furniture & Fixtures", type: "asset", level: 3, parentId: "1200", balance: 65000, isPostable: true },
+  { id: "1251", name: "Accumulated Depreciation - Furniture", type: "asset", level: 3, parentId: "1200", balance: -18000, isPostable: true },
+  { id: "1260", name: "Computer Equipment", type: "asset", level: 3, parentId: "1200", balance: 85000, isPostable: true },
+  { id: "1261", name: "Accumulated Depreciation - Computers", type: "asset", level: 3, parentId: "1200", balance: -32000, isPostable: true },
+  
+  // LIABILITIES (2000-2999)
+  { id: "2000", name: "Liabilities", type: "liability", level: 1, parentId: null, balance: 0, isPostable: false },
+  
+  // Current Liabilities (2100-2199)
+  { id: "2100", name: "Current Liabilities", type: "liability", level: 2, parentId: "2000", balance: 0, isPostable: false },
+  
+  // Accounts Payable (2110-2119)
+  { id: "2110", name: "Accounts Payable", type: "liability", level: 2, parentId: "2100", balance: 0, isPostable: false },
+  { id: "2111", name: "Trade Payables", type: "liability", level: 3, parentId: "2110", balance: 28900, isPostable: true },
+  { id: "2112", name: "Vendor Advances", type: "liability", level: 3, parentId: "2110", balance: 5500, isPostable: true },
+  { id: "2113", name: "Notes Payable - Short Term", type: "liability", level: 3, parentId: "2110", balance: 15000, isPostable: true },
+  
+  // Accrued Expenses (2120-2129)
+  { id: "2120", name: "Accrued Expenses", type: "liability", level: 2, parentId: "2100", balance: 0, isPostable: false },
+  { id: "2121", name: "Accrued Salaries & Wages", type: "liability", level: 3, parentId: "2120", balance: 18500, isPostable: true },
+  { id: "2122", name: "Accrued Payroll Taxes", type: "liability", level: 3, parentId: "2120", balance: 7200, isPostable: true },
+  { id: "2123", name: "Accrued Interest", type: "liability", level: 3, parentId: "2120", balance: 3400, isPostable: true },
+  { id: "2124", name: "Accrued Utilities", type: "liability", level: 3, parentId: "2120", balance: 2800, isPostable: true },
+  
+  // Taxes Payable (2130-2139)
+  { id: "2130", name: "Taxes Payable", type: "liability", level: 2, parentId: "2100", balance: 0, isPostable: false },
+  { id: "2131", name: "Sales Tax Payable", type: "liability", level: 3, parentId: "2130", balance: 8900, isPostable: true },
+  { id: "2132", name: "Income Tax Payable", type: "liability", level: 3, parentId: "2130", balance: 22000, isPostable: true },
+  { id: "2133", name: "Payroll Tax Payable", type: "liability", level: 3, parentId: "2130", balance: 6500, isPostable: true },
+  
+  // Other Current Liabilities (2140-2149)
+  { id: "2140", name: "Other Current Liabilities", type: "liability", level: 2, parentId: "2100", balance: 0, isPostable: false },
+  { id: "2141", name: "Customer Deposits", type: "liability", level: 3, parentId: "2140", balance: 12500, isPostable: true },
+  { id: "2142", name: "Unearned Revenue", type: "liability", level: 3, parentId: "2140", balance: 8000, isPostable: true },
+  { id: "2143", name: "Current Portion - Long Term Debt", type: "liability", level: 3, parentId: "2140", balance: 24000, isPostable: true },
+  
+  // Long-Term Liabilities (2200-2299)
+  { id: "2200", name: "Long-Term Liabilities", type: "liability", level: 2, parentId: "2000", balance: 0, isPostable: false },
+  { id: "2210", name: "Bank Loans - Long Term", type: "liability", level: 3, parentId: "2200", balance: 150000, isPostable: true },
+  { id: "2220", name: "Mortgage Payable", type: "liability", level: 3, parentId: "2200", balance: 280000, isPostable: true },
+  { id: "2230", name: "Equipment Loans", type: "liability", level: 3, parentId: "2200", balance: 75000, isPostable: true },
+  
+  // EQUITY (3000-3999)
+  { id: "3000", name: "Equity", type: "equity", level: 1, parentId: null, balance: 0, isPostable: false },
+  
+  // Owner's Equity (3100-3199)
+  { id: "3100", name: "Owner's Equity", type: "equity", level: 2, parentId: "3000", balance: 0, isPostable: false },
+  { id: "3110", name: "Common Stock", type: "equity", level: 3, parentId: "3100", balance: 200000, isPostable: true },
+  { id: "3120", name: "Preferred Stock", type: "equity", level: 3, parentId: "3100", balance: 50000, isPostable: true },
+  { id: "3130", name: "Additional Paid-in Capital", type: "equity", level: 3, parentId: "3100", balance: 75000, isPostable: true },
+  { id: "3140", name: "Owner's Contributions", type: "equity", level: 3, parentId: "3100", balance: 100000, isPostable: true },
+  { id: "3150", name: "Owner's Drawings", type: "equity", level: 3, parentId: "3100", balance: -25000, isPostable: true },
+  
+  // Retained Earnings (3200-3299)
+  { id: "3200", name: "Retained Earnings", type: "equity", level: 2, parentId: "3000", balance: 0, isPostable: false },
+  { id: "3210", name: "Retained Earnings - Prior Years", type: "equity", level: 3, parentId: "3200", balance: 185000, isPostable: true },
+  { id: "3220", name: "Current Year Earnings", type: "equity", level: 3, parentId: "3200", balance: 0, isPostable: true },
+  { id: "3230", name: "Dividends Paid", type: "equity", level: 3, parentId: "3200", balance: -15000, isPostable: true },
+  
+  // REVENUE (4000-4999)
+  { id: "4000", name: "Revenue", type: "revenue", level: 1, parentId: null, balance: 0, isPostable: false },
+  
+  // Sales Revenue (4100-4199)
+  { id: "4100", name: "Sales Revenue", type: "revenue", level: 2, parentId: "4000", balance: 0, isPostable: false },
+  { id: "4110", name: "Product Sales", type: "revenue", level: 3, parentId: "4100", balance: 485000, isPostable: true },
+  { id: "4120", name: "Service Revenue", type: "revenue", level: 3, parentId: "4100", balance: 125000, isPostable: true },
+  { id: "4130", name: "Shipping & Handling Revenue", type: "revenue", level: 3, parentId: "4100", balance: 18500, isPostable: true },
+  { id: "4140", name: "Sales Returns & Allowances", type: "revenue", level: 3, parentId: "4100", balance: -12500, isPostable: true },
+  { id: "4150", name: "Sales Discounts", type: "revenue", level: 3, parentId: "4100", balance: -8200, isPostable: true },
+  
+  // Other Income (4200-4299)
+  { id: "4200", name: "Other Income", type: "revenue", level: 2, parentId: "4000", balance: 0, isPostable: false },
+  { id: "4210", name: "Interest Income", type: "revenue", level: 3, parentId: "4200", balance: 5500, isPostable: true },
+  { id: "4220", name: "Dividend Income", type: "revenue", level: 3, parentId: "4200", balance: 2800, isPostable: true },
+  { id: "4230", name: "Rental Income", type: "revenue", level: 3, parentId: "4200", balance: 12000, isPostable: true },
+  { id: "4240", name: "Gain on Asset Sale", type: "revenue", level: 3, parentId: "4200", balance: 4500, isPostable: true },
+  { id: "4250", name: "Miscellaneous Income", type: "revenue", level: 3, parentId: "4200", balance: 1800, isPostable: true },
+  
+  // EXPENSES (5000-5999)
+  { id: "5000", name: "Expenses", type: "expense", level: 1, parentId: null, balance: 0, isPostable: false },
+  
+  // Cost of Goods Sold (5100-5199)
+  { id: "5100", name: "Cost of Goods Sold", type: "expense", level: 2, parentId: "5000", balance: 0, isPostable: false },
+  { id: "5110", name: "Cost of Materials", type: "expense", level: 3, parentId: "5100", balance: 145000, isPostable: true },
+  { id: "5120", name: "Direct Labor", type: "expense", level: 3, parentId: "5100", balance: 85000, isPostable: true },
+  { id: "5130", name: "Manufacturing Overhead", type: "expense", level: 3, parentId: "5100", balance: 42000, isPostable: true },
+  { id: "5140", name: "Freight In", type: "expense", level: 3, parentId: "5100", balance: 12500, isPostable: true },
+  { id: "5150", name: "Purchase Discounts", type: "expense", level: 3, parentId: "5100", balance: -5800, isPostable: true },
+  
+  // Operating Expenses (5200-5299)
+  { id: "5200", name: "Operating Expenses", type: "expense", level: 2, parentId: "5000", balance: 0, isPostable: false },
+  { id: "5210", name: "Rent Expense", type: "expense", level: 3, parentId: "5200", balance: 36000, isPostable: true },
+  { id: "5220", name: "Utilities Expense", type: "expense", level: 3, parentId: "5200", balance: 14500, isPostable: true },
+  { id: "5230", name: "Insurance Expense", type: "expense", level: 3, parentId: "5200", balance: 18000, isPostable: true },
+  { id: "5240", name: "Depreciation Expense", type: "expense", level: 3, parentId: "5200", balance: 45000, isPostable: true },
+  { id: "5250", name: "Repairs & Maintenance", type: "expense", level: 3, parentId: "5200", balance: 12800, isPostable: true },
+  { id: "5260", name: "Office Supplies", type: "expense", level: 3, parentId: "5200", balance: 4500, isPostable: true },
+  { id: "5270", name: "Telephone & Internet", type: "expense", level: 3, parentId: "5200", balance: 6200, isPostable: true },
+  { id: "5280", name: "Professional Fees", type: "expense", level: 3, parentId: "5200", balance: 15000, isPostable: true },
+  
+  // Payroll Expenses (5300-5399)
+  { id: "5300", name: "Payroll Expenses", type: "expense", level: 2, parentId: "5000", balance: 0, isPostable: false },
+  { id: "5310", name: "Salaries & Wages", type: "expense", level: 3, parentId: "5300", balance: 185000, isPostable: true },
+  { id: "5320", name: "Payroll Taxes", type: "expense", level: 3, parentId: "5300", balance: 28500, isPostable: true },
+  { id: "5330", name: "Employee Benefits", type: "expense", level: 3, parentId: "5300", balance: 32000, isPostable: true },
+  { id: "5340", name: "Workers Compensation", type: "expense", level: 3, parentId: "5300", balance: 8500, isPostable: true },
+  { id: "5350", name: "Training & Development", type: "expense", level: 3, parentId: "5300", balance: 5500, isPostable: true },
+  
+  // Marketing & Admin (5400-5499)
+  { id: "5400", name: "Marketing & Administrative", type: "expense", level: 2, parentId: "5000", balance: 0, isPostable: false },
+  { id: "5410", name: "Advertising & Promotion", type: "expense", level: 3, parentId: "5400", balance: 22000, isPostable: true },
+  { id: "5420", name: "Travel & Entertainment", type: "expense", level: 3, parentId: "5400", balance: 14500, isPostable: true },
+  { id: "5430", name: "Shipping & Freight Out", type: "expense", level: 3, parentId: "5400", balance: 18000, isPostable: true },
+  { id: "5440", name: "Bad Debt Expense", type: "expense", level: 3, parentId: "5400", balance: 3500, isPostable: true },
+  { id: "5450", name: "Bank Charges & Fees", type: "expense", level: 3, parentId: "5400", balance: 2800, isPostable: true },
+  { id: "5460", name: "Interest Expense", type: "expense", level: 3, parentId: "5400", balance: 12500, isPostable: true },
+  { id: "5470", name: "Licenses & Permits", type: "expense", level: 3, parentId: "5400", balance: 3200, isPostable: true },
+  { id: "5480", name: "Miscellaneous Expense", type: "expense", level: 3, parentId: "5400", balance: 4800, isPostable: true },
 ];
 
 export const mockJournalEntries = [

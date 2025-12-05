@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Download, CheckCircle } from "lucide-react";
-import { mockJournalEntries, mockAccounts } from "@/lib/mockData";
+import { mockJournalEntries, mockAccounts, type ChartOfAccountsEntry } from "@/lib/mockData";
 
 type JournalEntry = typeof mockJournalEntries[0];
 
@@ -56,6 +56,8 @@ export function JournalEntries() {
     ));
     console.log("Posted journal entry:", entryId);
   };
+
+  const postableAccounts = mockAccounts.filter(a => a.isPostable);
 
   const getAccountName = (accountId: string) => {
     return mockAccounts.find(a => a.id === accountId)?.name || accountId;
@@ -165,7 +167,7 @@ export function JournalEntries() {
                     <SelectValue placeholder="Select account" />
                   </SelectTrigger>
                   <SelectContent>
-                    {mockAccounts.map((account) => (
+                    {postableAccounts.map((account) => (
                       <SelectItem key={account.id} value={account.id}>
                         {account.id} - {account.name}
                       </SelectItem>
@@ -183,7 +185,7 @@ export function JournalEntries() {
                     <SelectValue placeholder="Select account" />
                   </SelectTrigger>
                   <SelectContent>
-                    {mockAccounts.map((account) => (
+                    {postableAccounts.map((account) => (
                       <SelectItem key={account.id} value={account.id}>
                         {account.id} - {account.name}
                       </SelectItem>
