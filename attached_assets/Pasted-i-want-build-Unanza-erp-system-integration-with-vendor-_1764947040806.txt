@@ -1,0 +1,102 @@
+i want build "Unanza" erp system integration with vendor and customer portal with features below:
+
+You must fully build the following screens and workflows:
+1. Sales Orders
+•	Sales Order List (sortable, filterable, paginated table)
+•	New Sales Order Form (customer selector, product selector, price, quantity, tax, totals)
+•	Sales Order Detail View (status, items, delivery, invoice links)
+•	Status workflow: Draft → Confirmed → Delivered → Invoiced
+2. Customers
+•	Customer Database Table
+•	Create/Edit Customer Form
+•	Contact, billing, shipping addresses
+•	Customer profile page with order history
+3. Deliveries
+•	Delivery List Table
+•	Pick/Pack/Ship workflow
+•	Delivery detail view: line items, quantities shipped, status
+4. Sales Invoices
+•	Invoice List
+•	Create Invoice from Sales Order
+•	Payment status (Unpaid / Partial / Paid)
+•	Invoice PDF-style preview layout
+______________
+🏬 Module 2 — Warehouse
+Build a complete warehouse management suite:
+1. Products
+•	Product catalog with images
+•	Inventory fields: SKU, category, UOM, min/max levels
+•	Product detail pages
+2. Locations
+•	Warehouse locations (bins, racks, shelves)
+•	Location → Stock mapping table
+•	Move stock between locations
+3. Stock Levels
+•	Real-time stock list
+•	Alerts for low stock
+•	Stock valuation (mock)
+4. Movements
+•	Movement history log (IN, OUT, TRANSFER)
+•	Movement form (source, destination, quantity)
+•	Auto-update stock levels for all transactions
+5. Purchase Orders
+•	PO list
+•	Create PO (supplier, items, quantities, cost)
+•	Receive PO → updates stock
+•	PO status workflow: Draft → Ordered → Received
+______________
+💰 Module 3 — Financials
+Implement basic accounting flows:
+1. Journal Entries
+•	Journal entry table
+•	Debit/credit lines
+•	Account selector
+•	Posting validation (debits = credits)
+2. Chart of Accounts
+•	Account list (assets, liabilities, equity, revenue, expenses)
+•	Add/Edit accounts
+•	Structured hierarchy view
+3. Accounts Receivable
+•	Customer invoices
+•	Aging report (mock data)
+•	Payment receipts
+4. Accounts Payable
+•	Vendor invoices
+•	Aging report
+•	Payment release screen
+______________
+📊 Module 4 — Reports & Human Resources
+Reports
+•	Sales report
+•	Inventory summary
+•	Financial statement overview (mock)
+•	Export to CSV
+Human Resources
+1. Employees
+•	Employee directory
+•	Profile page
+•	Employment info & documents
+2. Attendance
+•	Daily attendance table
+•	Check-in/check-out simulator
+•	Summary view
+3. Leave Requests
+•	Leave request form
+•	Approval workflow
+4. Payroll
+•	Payroll runs (mock data)
+•	Payslip detail page
+______________
+⚙️ Module 5 — System
+1. Vendor Portal
+•	Vendor list
+•	Vendor access screen
+•	PO visibility for vendors
+2. Customer Portal
+•	Customer login simulation
+•	Customer order history
+•	Invoice download
+3. Settings
+•	System preferences
+•	Roles & permissions UI
+•	Theme configuration (light/dark)
