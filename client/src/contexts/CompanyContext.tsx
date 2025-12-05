@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { Company, CompanyContext as CompanyContextType, CompanyHierarchyNode } from "@shared/schema";
+import type { Company, CompanyContext as CompanyContextType, CompanyHierarchyNode, CompanyLevel } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 
 interface CompanyProviderState {
@@ -10,12 +10,19 @@ interface CompanyProviderState {
   permissions: string[];
   isLoading: boolean;
   error: string | null;
+  // Hierarchy-aware access
+  companyLevel: CompanyLevel;
+  accessibleCompanyIds: string[];
+  canConsolidate: boolean;
+  parentCompany: Company | null;
+  childCompanies: Company[];
 }
 
 interface CompanyProviderActions {
   switchCompany: (companyId: string) => Promise<void>;
   hasPermission: (permission: string) => boolean;
   refreshContext: () => void;
+  canAccessCompanyData: (targetCompanyId: string) => boolean;
 }
 
 type CompanyProviderValue = CompanyProviderState & CompanyProviderActions;
@@ -123,6 +130,12 @@ export function CompanyProvider({ children }: CompanyProviderProps) {
     return false;
   }, [context?.permissions]);
 
+  // Check if user can access data for a target company based on hierarchy
+  const canAccessCompanyData = useCallback((targetCompanyId: string): boolean => {
+    if (!context?.accessibleCompanyIds) return false;
+    return context.accessibleCompanyIds.includes(targetCompanyId);
+  }, [context?.accessibleCompanyIds]);
+
   // Get active company from context or find from list
   const activeCompany = context?.activeCompany || 
     (activeCompanyId ? allCompanies.find(c => c.id === activeCompanyId) || null : null);
@@ -134,9 +147,16 @@ export function CompanyProvider({ children }: CompanyProviderProps) {
     permissions: context?.permissions || [],
     isLoading: isLoading || switchCompanyMutation.isPending,
     error: error?.message || switchCompanyMutation.error?.message || null,
+    // Hierarchy-aware access
+    companyLevel: context?.companyLevel || 3,
+    accessibleCompanyIds: context?.accessibleCompanyIds || [],
+    canConsolidate: context?.canConsolidate || false,
+    parentCompany: context?.parentCompany || null,
+    childCompanies: context?.childCompanies || [],
     switchCompany,
     hasPermission,
     refreshContext: () => refreshContext(),
+    canAccessCompanyData,
   };
 
   return (

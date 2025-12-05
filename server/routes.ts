@@ -71,6 +71,10 @@ async function companyContextMiddleware(
 }
 
 // Middleware to verify company access for company-scoped routes
+// Uses hierarchy-derived accessibleCompanyIds for proper level-based visibility:
+// - Branch (level 3): Can only see its own data
+// - Subsidiary (level 2): Can see its own data + all its Branches
+// - Holding (level 1): Can see all Subsidiaries and their Branches
 function verifyCompanyAccess(
   req: CompanyRequest,
   res: Response,
@@ -78,12 +82,16 @@ function verifyCompanyAccess(
 ) {
   const urlCompanyId = req.params.companyId;
   
-  // If route has companyId param, verify access
+  // If route has companyId param, verify access using hierarchy-derived accessible IDs
   if (urlCompanyId && req.companyContext) {
-    const hasAccess = req.companyContext.userCompanies.some(c => c.id === urlCompanyId);
-    if (!hasAccess) {
+    // Use accessibleCompanyIds which is computed based on company level
+    const hasHierarchyAccess = req.companyContext.accessibleCompanyIds.includes(urlCompanyId);
+    // Also check if user is directly assigned to the company (for users at different levels)
+    const hasDirectAccess = req.companyContext.userCompanies.some(c => c.id === urlCompanyId);
+    
+    if (!hasHierarchyAccess && !hasDirectAccess) {
       return res.status(403).json({
-        error: "Access denied: You do not have access to this company's data"
+        error: "Access denied: You do not have access to this company's data based on your company level"
       });
     }
   }
@@ -581,17 +589,17 @@ export async function registerRoutes(
       // Get intercompany transfers that need elimination
       const transfers = await storage.getIntercompanyTransfers(req.params.companyId);
       
-      // Generate elimination entries based on transfers
+      // Generate elimination entries based on completed stock transfers
       const eliminations = transfers
         .filter(t => t.status === "completed")
         .map(t => ({
           id: `elim-${t.id}`,
           transferId: t.id,
-          type: t.transferType,
-          amount: t.amount,
+          type: "stock_transfer", // Intercompany stock transfers
+          amount: t.totalValue || "0",
           sourceCompanyId: t.sourceCompanyId,
           targetCompanyId: t.targetCompanyId,
-          description: `Eliminate IC ${t.transferType}: ${t.description}`,
+          description: `Eliminate IC Stock Transfer: ${t.notes || t.transferNumber}`,
         }));
       
       res.json(eliminations);

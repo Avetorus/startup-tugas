@@ -480,8 +480,106 @@ export class MemStorage implements IStorage {
       }));
   }
 
+  // Validate 3-level hierarchy rules:
+  // - Holding (level 1): No parent, companyType must be 'holding'
+  // - Subsidiary (level 2): Parent must be Holding, companyType must be 'subsidiary'
+  // - Branch (level 3): Parent must be Subsidiary, companyType must be 'branch'
+  private async validateCompanyHierarchy(
+    companyType: string,
+    parentId: string | null,
+    excludeCompanyId?: string
+  ): Promise<{ valid: boolean; error?: string; level: number; path: string }> {
+    const validTypes = ["holding", "subsidiary", "branch"];
+    if (!validTypes.includes(companyType)) {
+      return { 
+        valid: false, 
+        error: `Invalid company type: ${companyType}. Must be holding, subsidiary, or branch.`,
+        level: 0,
+        path: ""
+      };
+    }
+
+    // Holding must have no parent
+    if (companyType === "holding") {
+      if (parentId) {
+        return { 
+          valid: false, 
+          error: "Holding companies cannot have a parent.",
+          level: 0,
+          path: ""
+        };
+      }
+      return { valid: true, level: 1, path: "" }; // Path will be set to company code
+    }
+
+    // Subsidiary and Branch must have a parent
+    if (!parentId) {
+      return { 
+        valid: false, 
+        error: `${companyType} companies must have a parent.`,
+        level: 0,
+        path: ""
+      };
+    }
+
+    const parent = await this.getCompany(parentId);
+    if (!parent) {
+      return { 
+        valid: false, 
+        error: "Parent company not found.",
+        level: 0,
+        path: ""
+      };
+    }
+
+    // Subsidiary must have Holding parent
+    if (companyType === "subsidiary") {
+      if (parent.companyType !== "holding") {
+        return { 
+          valid: false, 
+          error: "Subsidiaries must belong to a Holding company.",
+          level: 0,
+          path: ""
+        };
+      }
+      return { valid: true, level: 2, path: parent.path };
+    }
+
+    // Branch must have Subsidiary parent
+    if (companyType === "branch") {
+      if (parent.companyType !== "subsidiary") {
+        return { 
+          valid: false, 
+          error: "Branches must belong to a Subsidiary company.",
+          level: 0,
+          path: ""
+        };
+      }
+      return { valid: true, level: 3, path: parent.path };
+    }
+
+    return { valid: false, error: "Unknown validation error.", level: 0, path: "" };
+  }
+
   async createCompany(insertCompany: InsertCompany): Promise<Company> {
+    // Validate 3-level hierarchy
+    const companyType = insertCompany.companyType ?? "subsidiary";
+    const validation = await this.validateCompanyHierarchy(
+      companyType,
+      insertCompany.parentId ?? null
+    );
+
+    if (!validation.valid) {
+      throw new Error(validation.error);
+    }
+
     const id = randomUUID();
+    
+    // Auto-calculate path and level based on hierarchy
+    const path = validation.level === 1 
+      ? insertCompany.code 
+      : `${validation.path}/${insertCompany.code}`;
+
     const company: Company = {
       id,
       code: insertCompany.code,
@@ -489,9 +587,9 @@ export class MemStorage implements IStorage {
       legalName: insertCompany.legalName ?? null,
       taxId: insertCompany.taxId ?? null,
       parentId: insertCompany.parentId ?? null,
-      path: insertCompany.path,
-      level: insertCompany.level ?? 1,
-      companyType: insertCompany.companyType ?? "subsidiary",
+      path: path, // Always use calculated path based on hierarchy
+      level: validation.level, // Always use calculated level
+      companyType: companyType,
       currency: insertCompany.currency ?? "USD",
       locale: insertCompany.locale ?? "en-US",
       timezone: insertCompany.timezone ?? "UTC",
@@ -516,7 +614,40 @@ export class MemStorage implements IStorage {
   async updateCompany(id: string, updates: Partial<Company>): Promise<Company | undefined> {
     const company = this.companies.get(id);
     if (!company) return undefined;
-    const updated = { ...company, ...updates, updatedAt: new Date() };
+    
+    // SECURITY: Always ignore client-supplied path and level - they must be calculated
+    // This prevents path/level tampering even when parent/type aren't changed
+    delete updates.path;
+    delete updates.level;
+
+    // Determine the effective type and parent (use updates if provided, else existing)
+    const effectiveType = updates.companyType || company.companyType;
+    const effectiveParentId = updates.parentId !== undefined ? updates.parentId : company.parentId;
+    const effectiveCode = updates.code || company.code;
+    
+    // Always validate and recalculate hierarchy for any update (in case code changed, which affects path)
+    const validation = await this.validateCompanyHierarchy(
+      effectiveType,
+      effectiveParentId,
+      id // Exclude self when validating
+    );
+
+    if (!validation.valid) {
+      throw new Error(validation.error);
+    }
+
+    // Always calculate path and level from hierarchy, not from client input
+    const calculatedPath = validation.level === 1 
+      ? effectiveCode 
+      : `${validation.path}/${effectiveCode}`;
+
+    const updated = { 
+      ...company, 
+      ...updates, 
+      path: calculatedPath,
+      level: validation.level,
+      updatedAt: new Date() 
+    };
     this.companies.set(id, updated);
     return updated;
   }
@@ -687,6 +818,30 @@ export class MemStorage implements IStorage {
   }
 
   // ===================== COMPANY CONTEXT =====================
+  
+  // Get accessible company IDs based on hierarchy level
+  // - Holding: Can see all subsidiaries and their branches
+  // - Subsidiary: Can see itself and all its branches
+  // - Branch: Can only see itself
+  private getAccessibleCompanyIds(company: Company, allCompanies: Company[]): string[] {
+    const accessibleIds: string[] = [company.id];
+    
+    if (company.level === 1) { // Holding - can see all descendants
+      const descendants = allCompanies.filter(c => 
+        c.path.startsWith(company.path + "/") && c.id !== company.id
+      );
+      accessibleIds.push(...descendants.map(c => c.id));
+    } else if (company.level === 2) { // Subsidiary - can see its branches
+      const branches = allCompanies.filter(c => 
+        c.parentId === company.id && c.level === 3
+      );
+      accessibleIds.push(...branches.map(c => c.id));
+    }
+    // Branch (level 3) can only see itself - already added
+    
+    return accessibleIds;
+  }
+
   async getCompanyContext(userId: string, companyId: string): Promise<CompanyContext | undefined> {
     const user = await this.getUser(userId);
     if (!user) return undefined;
@@ -700,12 +855,37 @@ export class MemStorage implements IStorage {
     const role = await this.getUserRole(userId, companyId);
     const permissions = role ? (role.permissions as string[]) : [];
 
+    // Get all companies for hierarchy calculations
+    const allCompanies = await this.getCompanies();
+    
+    // Get parent company
+    const parentCompany = company.parentId 
+      ? allCompanies.find(c => c.id === company.parentId) || null 
+      : null;
+    
+    // Get direct child companies
+    const childCompanies = allCompanies.filter(c => c.parentId === company.id);
+    
+    // Calculate accessible company IDs based on hierarchy
+    const accessibleCompanyIds = this.getAccessibleCompanyIds(company, allCompanies);
+    
+    // Determine company level (1=Holding, 2=Subsidiary, 3=Branch)
+    const companyLevel = company.level as 1 | 2 | 3;
+    
+    // Only Holding and Subsidiary can consolidate
+    const canConsolidate = company.level <= 2;
+
     return {
       activeCompanyId: companyId,
       activeCompany: company,
       userCompanies,
       permissions,
       role: role || null,
+      companyLevel,
+      accessibleCompanyIds,
+      canConsolidate,
+      parentCompany,
+      childCompanies,
     };
   }
 

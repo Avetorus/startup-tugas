@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { 
@@ -13,14 +13,14 @@ import {
   Globe,
   Building,
   GitBranch,
-  Settings,
-  Users
+  AlertCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Dialog,
   DialogContent,
@@ -62,12 +62,14 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Company, CompanyHierarchyNode } from "@shared/schema";
+import { COMPANY_TYPES, COMPANY_LEVELS } from "@shared/schema";
 import { cn } from "@/lib/utils";
 
+// Strict 3-level hierarchy: Holding (level 1) -> Subsidiary (level 2) -> Branch (level 3)
 const companyFormSchema = z.object({
   name: z.string().min(1, "Company name is required"),
   code: z.string().min(1, "Company code is required").max(10, "Max 10 characters"),
-  companyType: z.enum(["holding", "subsidiary", "branch", "division"]),
+  companyType: z.enum([COMPANY_TYPES.HOLDING, COMPANY_TYPES.SUBSIDIARY, COMPANY_TYPES.BRANCH]),
   parentId: z.string().nullable(),
   taxId: z.string().optional(),
   registrationNumber: z.string().optional(),
@@ -79,6 +81,19 @@ const companyFormSchema = z.object({
   phone: z.string().optional(),
   email: z.string().email().optional().or(z.literal("")),
   website: z.string().url().optional().or(z.literal("")),
+}).refine((data) => {
+  // Holding company must have no parent
+  if (data.companyType === COMPANY_TYPES.HOLDING && data.parentId) {
+    return false;
+  }
+  // Subsidiary and Branch must have a parent
+  if ((data.companyType === COMPANY_TYPES.SUBSIDIARY || data.companyType === COMPANY_TYPES.BRANCH) && !data.parentId) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Holding has no parent; Subsidiary/Branch must have a parent",
+  path: ["parentId"],
 });
 
 type CompanyFormValues = z.infer<typeof companyFormSchema>;
@@ -87,14 +102,19 @@ const companyTypeIcons: Record<string, typeof Building2> = {
   holding: Globe,
   subsidiary: Building,
   branch: GitBranch,
-  division: Building2,
 };
 
 const companyTypeColors: Record<string, string> = {
   holding: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
   subsidiary: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
   branch: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
-  division: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+};
+
+// Company type descriptions for the UI
+const companyTypeDescriptions: Record<string, string> = {
+  holding: "Level 1: Top-level entity that owns subsidiaries. Can consolidate all data.",
+  subsidiary: "Level 2: Owned by a Holding. Can have Branches and consolidate their data.",
+  branch: "Level 3: Operational unit owned by a Subsidiary. Can only see its own data.",
 };
 
 interface HierarchyTreeProps {
@@ -308,7 +328,7 @@ export function CompanyManagement() {
     form.reset({
       name: company.name,
       code: company.code,
-      companyType: company.companyType as "holding" | "subsidiary" | "branch" | "division",
+      companyType: company.companyType as "holding" | "subsidiary" | "branch",
       parentId: company.parentId,
       currency: company.currency,
       taxId: company.taxId || "",
@@ -558,63 +578,143 @@ export function CompanyManagement() {
                 <FormField
                   control={form.control}
                   name="companyType"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Company Type</FormLabel>
-                      <Select 
-                        onValueChange={field.onChange} 
-                        defaultValue={field.value}
-                        data-testid="select-company-type"
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select type" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="holding">Holding Company</SelectItem>
-                          <SelectItem value="subsidiary">Subsidiary</SelectItem>
-                          <SelectItem value="branch">Branch</SelectItem>
-                          <SelectItem value="division">Division</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+                  render={({ field }) => {
+                    // Watch company type to filter parent options
+                    const selectedType = field.value;
+                    return (
+                      <FormItem>
+                        <FormLabel>Company Type</FormLabel>
+                        <Select 
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            // Reset parent when type changes
+                            if (value === COMPANY_TYPES.HOLDING) {
+                              form.setValue("parentId", null);
+                            }
+                          }} 
+                          value={field.value}
+                          data-testid="select-company-type"
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select type" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value={COMPANY_TYPES.HOLDING}>
+                              <div className="flex items-center gap-2">
+                                <Globe className="h-4 w-4" />
+                                Holding Company (Level 1)
+                              </div>
+                            </SelectItem>
+                            <SelectItem value={COMPANY_TYPES.SUBSIDIARY}>
+                              <div className="flex items-center gap-2">
+                                <Building className="h-4 w-4" />
+                                Subsidiary (Level 2)
+                              </div>
+                            </SelectItem>
+                            <SelectItem value={COMPANY_TYPES.BRANCH}>
+                              <div className="flex items-center gap-2">
+                                <GitBranch className="h-4 w-4" />
+                                Branch (Level 3)
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          {selectedType && companyTypeDescriptions[selectedType]}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
                 />
 
                 <FormField
                   control={form.control}
                   name="parentId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Parent Company</FormLabel>
-                      <Select 
-                        onValueChange={(value) => field.onChange(value === "__none__" ? null : value)} 
-                        defaultValue={field.value || "__none__"}
-                        data-testid="select-parent-company"
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select parent (optional)" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="__none__">No Parent (Root)</SelectItem>
-                          {companies
-                            .filter(c => c.id !== editingCompany?.id)
-                            .map(company => (
-                              <SelectItem key={company.id} value={company.id}>
-                                {company.name}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+                  render={({ field }) => {
+                    const selectedType = form.watch("companyType");
+                    const isHolding = selectedType === COMPANY_TYPES.HOLDING;
+                    
+                    // Filter parent options based on company type
+                    // Subsidiary can only have Holding parent (level 1)
+                    // Branch can only have Subsidiary parent (level 2)
+                    const filteredParents = companies.filter(c => {
+                      if (c.id === editingCompany?.id) return false;
+                      if (selectedType === COMPANY_TYPES.SUBSIDIARY) {
+                        return c.companyType === COMPANY_TYPES.HOLDING;
+                      }
+                      if (selectedType === COMPANY_TYPES.BRANCH) {
+                        return c.companyType === COMPANY_TYPES.SUBSIDIARY;
+                      }
+                      return false;
+                    });
+
+                    return (
+                      <FormItem>
+                        <FormLabel>Parent Company</FormLabel>
+                        <Select 
+                          onValueChange={(value) => field.onChange(value === "__none__" ? null : value)} 
+                          value={field.value || "__none__"}
+                          disabled={isHolding}
+                          data-testid="select-parent-company"
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder={isHolding ? "N/A for Holding" : "Select parent"} />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {isHolding ? (
+                              <SelectItem value="__none__">No Parent (Root)</SelectItem>
+                            ) : (
+                              <>
+                                {filteredParents.length === 0 ? (
+                                  <SelectItem value="__none__" disabled>
+                                    {selectedType === COMPANY_TYPES.SUBSIDIARY 
+                                      ? "No Holdings available" 
+                                      : "No Subsidiaries available"}
+                                  </SelectItem>
+                                ) : (
+                                  filteredParents.map(company => (
+                                    <SelectItem key={company.id} value={company.id}>
+                                      <div className="flex items-center gap-2">
+                                        {company.name}
+                                        <Badge variant="outline" className="text-xs ml-2">
+                                          {company.code}
+                                        </Badge>
+                                      </div>
+                                    </SelectItem>
+                                  ))
+                                )}
+                              </>
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          {isHolding 
+                            ? "Holdings are root entities with no parent" 
+                            : selectedType === COMPANY_TYPES.SUBSIDIARY 
+                              ? "Select the Holding company that owns this subsidiary"
+                              : "Select the Subsidiary that owns this branch"}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
                 />
               </div>
+
+              {/* Hierarchy rules info */}
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>3-Level Hierarchy Rules:</strong> Holding (Level 1) can have Subsidiaries. 
+                  Subsidiaries (Level 2) belong to a Holding and can have Branches. 
+                  Branches (Level 3) belong to a Subsidiary and cannot have children.
+                </AlertDescription>
+              </Alert>
 
               <div className="grid grid-cols-3 gap-4">
                 <FormField

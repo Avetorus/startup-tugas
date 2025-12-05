@@ -4,10 +4,30 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // ============================================================================
+// COMPANY HIERARCHY CONSTANTS (defined first for use in schema validation)
+// ============================================================================
+
+// Strict 3-level hierarchy: Holding (level 1) → Subsidiary (level 2) → Branch (level 3)
+export const COMPANY_LEVELS = {
+  HOLDING: 1,
+  SUBSIDIARY: 2,
+  BRANCH: 3,
+} as const;
+
+export const COMPANY_TYPES = {
+  HOLDING: "holding",
+  SUBSIDIARY: "subsidiary", 
+  BRANCH: "branch",
+} as const;
+
+export type CompanyLevel = typeof COMPANY_LEVELS[keyof typeof COMPANY_LEVELS];
+export type CompanyType = typeof COMPANY_TYPES[keyof typeof COMPANY_TYPES];
+
+// ============================================================================
 // MULTI-COMPANY CORE TABLES
 // ============================================================================
 
-// Companies table - supports hierarchical structure with unlimited depth
+// Companies table - strict 3-level hierarchy: Holding (1) → Subsidiary (2) → Branch (3)
 export const companies = pgTable("companies", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   code: varchar("code", { length: 20 }).notNull().unique(),
@@ -15,9 +35,9 @@ export const companies = pgTable("companies", {
   legalName: text("legal_name"),
   taxId: varchar("tax_id", { length: 50 }),
   parentId: varchar("parent_id").references((): any => companies.id),
-  path: text("path").notNull(), // Materialized path for hierarchy (e.g., "ROOT/PARENT/CHILD")
-  level: integer("level").notNull().default(1), // Depth level in hierarchy
-  companyType: varchar("company_type", { length: 50 }).notNull().default("subsidiary"), // holding, subsidiary, branch, division
+  path: text("path").notNull(), // Materialized path for hierarchy (e.g., "HOLDING/SUBSIDIARY/BRANCH")
+  level: integer("level").notNull().default(1), // 1=Holding, 2=Subsidiary, 3=Branch (max depth)
+  companyType: varchar("company_type", { length: 50 }).notNull().default("holding"), // holding, subsidiary, branch only
   currency: varchar("currency", { length: 3 }).notNull().default("USD"),
   locale: varchar("locale", { length: 10 }).default("en-US"),
   timezone: varchar("timezone", { length: 50 }).default("UTC"),
@@ -453,10 +473,21 @@ export const consolidationRuns = pgTable("consolidation_runs", {
 // ============================================================================
 
 // Company schemas
-export const insertCompanySchema = createInsertSchema(companies).omit({
+// Insert schema with strict validation for 3-level hierarchy
+const baseInsertCompanySchema = createInsertSchema(companies).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+  // Level and path are auto-calculated based on parent, don't allow client to set
+  level: true,
+  path: true,
+});
+
+// Enforce only valid company types
+export const insertCompanySchema = baseInsertCompanySchema.extend({
+  companyType: z.enum([COMPANY_TYPES.HOLDING, COMPANY_TYPES.SUBSIDIARY, COMPANY_TYPES.BRANCH]),
+  // Path is optional - will be auto-calculated if not provided
+  path: z.string().optional(),
 });
 export type InsertCompany = z.infer<typeof insertCompanySchema>;
 export type Company = typeof companies.$inferSelect;
@@ -626,16 +657,53 @@ export type SharedAccess = typeof sharedAccess.$inferSelect;
 // HELPER TYPES FOR MULTI-COMPANY CONTEXT
 // ============================================================================
 
+// Access rules based on company level
+export interface HierarchyAccessRules {
+  // Branch (level 3): Can only see its own data
+  // Subsidiary (level 2): Can see its own data + all its Branches
+  // Holding (level 1): Can see all Subsidiaries and their Branches for consolidation
+  canViewCompanyData(viewerCompanyId: string, targetCompanyId: string): boolean;
+  getAccessibleCompanyIds(): string[];
+  canPerformConsolidation(): boolean;
+  canPerformIntercompanyTransaction(targetCompanyId: string): boolean;
+}
+
 export interface CompanyContext {
   activeCompanyId: string;
   activeCompany: Company;
   userCompanies: Company[];
   permissions: string[];
   role: Role | null;
+  // Hierarchy-aware access
+  companyLevel: CompanyLevel;
+  accessibleCompanyIds: string[]; // IDs of companies this user can view data for
+  canConsolidate: boolean; // Only Holding and Subsidiary can consolidate
+  parentCompany: Company | null; // Parent in hierarchy
+  childCompanies: Company[]; // Direct children in hierarchy
 }
 
 export interface CompanyHierarchyNode {
   company: Company;
   children: CompanyHierarchyNode[];
   level: number;
+}
+
+// Helper to validate company type matches level
+export function getCompanyTypeForLevel(level: number): CompanyType {
+  switch (level) {
+    case 1: return COMPANY_TYPES.HOLDING;
+    case 2: return COMPANY_TYPES.SUBSIDIARY;
+    case 3: return COMPANY_TYPES.BRANCH;
+    default: throw new Error(`Invalid company level: ${level}. Must be 1 (Holding), 2 (Subsidiary), or 3 (Branch)`);
+  }
+}
+
+// Helper to get level for company type
+export function getLevelForCompanyType(type: string): CompanyLevel {
+  switch (type) {
+    case COMPANY_TYPES.HOLDING: return COMPANY_LEVELS.HOLDING;
+    case COMPANY_TYPES.SUBSIDIARY: return COMPANY_LEVELS.SUBSIDIARY;
+    case COMPANY_TYPES.BRANCH: return COMPANY_LEVELS.BRANCH;
+    default: throw new Error(`Invalid company type: ${type}. Must be holding, subsidiary, or branch`);
+  }
 }
