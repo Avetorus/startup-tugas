@@ -1,22 +1,397 @@
-import { type User, type InsertUser } from "@shared/schema";
+import { 
+  type User, type InsertUser,
+  type Company, type InsertCompany,
+  type CompanySettings, type InsertCompanySettings,
+  type FiscalPeriod, type InsertFiscalPeriod,
+  type Role, type InsertRole,
+  type UserCompanyRole, type InsertUserCompanyRole,
+  type Account, type InsertAccount,
+  type Warehouse, type InsertWarehouse,
+  type Product, type InsertProduct,
+  type Customer, type InsertCustomer,
+  type Vendor, type InsertVendor,
+  type Tax, type InsertTax,
+  type SalesOrder, type InsertSalesOrder,
+  type PurchaseOrder, type InsertPurchaseOrder,
+  type IntercompanyTransfer, type InsertIntercompanyTransfer,
+  type JournalEntry, type InsertJournalEntry,
+  type SharedAccess, type InsertSharedAccess,
+  type CompanyContext, type CompanyHierarchyNode
+} from "@shared/schema";
 import { randomUUID } from "crypto";
 
-// modify the interface with any CRUD methods
-// you might need
+// ============================================================================
+// STORAGE INTERFACE - MULTI-COMPANY SUPPORT
+// ============================================================================
 
 export interface IStorage {
+  // Users
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
+  
+  // Companies
+  getCompany(id: string): Promise<Company | undefined>;
+  getCompanyByCode(code: string): Promise<Company | undefined>;
+  getCompanies(): Promise<Company[]>;
+  getChildCompanies(parentId: string): Promise<Company[]>;
+  getCompanyHierarchy(rootId?: string): Promise<CompanyHierarchyNode[]>;
+  createCompany(company: InsertCompany): Promise<Company>;
+  updateCompany(id: string, updates: Partial<Company>): Promise<Company | undefined>;
+  
+  // Company Settings
+  getCompanySettings(companyId: string): Promise<CompanySettings | undefined>;
+  createCompanySettings(settings: InsertCompanySettings): Promise<CompanySettings>;
+  updateCompanySettings(companyId: string, updates: Partial<CompanySettings>): Promise<CompanySettings | undefined>;
+  
+  // Fiscal Periods
+  getFiscalPeriods(companyId: string): Promise<FiscalPeriod[]>;
+  getFiscalPeriod(id: string): Promise<FiscalPeriod | undefined>;
+  getCurrentFiscalPeriod(companyId: string): Promise<FiscalPeriod | undefined>;
+  createFiscalPeriod(period: InsertFiscalPeriod): Promise<FiscalPeriod>;
+  closeFiscalPeriod(id: string, closedBy: string): Promise<FiscalPeriod | undefined>;
+  
+  // Roles
+  getRole(id: string): Promise<Role | undefined>;
+  getRoleByCode(code: string): Promise<Role | undefined>;
+  getRoles(): Promise<Role[]>;
+  createRole(role: InsertRole): Promise<Role>;
+  
+  // User Company Roles
+  getUserCompanyRoles(userId: string): Promise<UserCompanyRole[]>;
+  getUserCompanies(userId: string): Promise<Company[]>;
+  getUserRole(userId: string, companyId: string): Promise<Role | undefined>;
+  assignUserToCompany(assignment: InsertUserCompanyRole): Promise<UserCompanyRole>;
+  removeUserFromCompany(userId: string, companyId: string): Promise<void>;
+  
+  // Company Context
+  getCompanyContext(userId: string, companyId: string): Promise<CompanyContext | undefined>;
+  
+  // Chart of Accounts (company-scoped)
+  getAccounts(companyId: string): Promise<Account[]>;
+  getAccount(id: string): Promise<Account | undefined>;
+  getAccountByCode(companyId: string, accountCode: string): Promise<Account | undefined>;
+  createAccount(account: InsertAccount): Promise<Account>;
+  updateAccount(id: string, updates: Partial<Account>): Promise<Account | undefined>;
+  
+  // Warehouses (company-scoped)
+  getWarehouses(companyId: string): Promise<Warehouse[]>;
+  getWarehouse(id: string): Promise<Warehouse | undefined>;
+  createWarehouse(warehouse: InsertWarehouse): Promise<Warehouse>;
+  updateWarehouse(id: string, updates: Partial<Warehouse>): Promise<Warehouse | undefined>;
+  
+  // Products (company-scoped)
+  getProducts(companyId: string): Promise<Product[]>;
+  getProduct(id: string): Promise<Product | undefined>;
+  getProductBySku(companyId: string, sku: string): Promise<Product | undefined>;
+  createProduct(product: InsertProduct): Promise<Product>;
+  updateProduct(id: string, updates: Partial<Product>): Promise<Product | undefined>;
+  
+  // Customers (company-scoped)
+  getCustomers(companyId: string): Promise<Customer[]>;
+  getCustomer(id: string): Promise<Customer | undefined>;
+  createCustomer(customer: InsertCustomer): Promise<Customer>;
+  updateCustomer(id: string, updates: Partial<Customer>): Promise<Customer | undefined>;
+  
+  // Vendors (company-scoped)
+  getVendors(companyId: string): Promise<Vendor[]>;
+  getVendor(id: string): Promise<Vendor | undefined>;
+  createVendor(vendor: InsertVendor): Promise<Vendor>;
+  updateVendor(id: string, updates: Partial<Vendor>): Promise<Vendor | undefined>;
+  
+  // Taxes (company-scoped)
+  getTaxes(companyId: string): Promise<Tax[]>;
+  getTax(id: string): Promise<Tax | undefined>;
+  createTax(tax: InsertTax): Promise<Tax>;
+  
+  // Sales Orders (company-scoped)
+  getSalesOrders(companyId: string): Promise<SalesOrder[]>;
+  getSalesOrder(id: string): Promise<SalesOrder | undefined>;
+  createSalesOrder(order: InsertSalesOrder): Promise<SalesOrder>;
+  updateSalesOrder(id: string, updates: Partial<SalesOrder>): Promise<SalesOrder | undefined>;
+  
+  // Purchase Orders (company-scoped)
+  getPurchaseOrders(companyId: string): Promise<PurchaseOrder[]>;
+  getPurchaseOrder(id: string): Promise<PurchaseOrder | undefined>;
+  createPurchaseOrder(order: InsertPurchaseOrder): Promise<PurchaseOrder>;
+  updatePurchaseOrder(id: string, updates: Partial<PurchaseOrder>): Promise<PurchaseOrder | undefined>;
+  
+  // Intercompany Transfers
+  getIntercompanyTransfers(companyId: string): Promise<IntercompanyTransfer[]>;
+  getIntercompanyTransfer(id: string): Promise<IntercompanyTransfer | undefined>;
+  createIntercompanyTransfer(transfer: InsertIntercompanyTransfer): Promise<IntercompanyTransfer>;
+  updateIntercompanyTransfer(id: string, updates: Partial<IntercompanyTransfer>): Promise<IntercompanyTransfer | undefined>;
+  
+  // Shared Access
+  getSharedAccess(granteeCompanyId: string, entityType: string): Promise<SharedAccess[]>;
+  grantSharedAccess(access: InsertSharedAccess): Promise<SharedAccess>;
+  revokeSharedAccess(id: string): Promise<void>;
 }
+
+// ============================================================================
+// IN-MEMORY STORAGE IMPLEMENTATION
+// ============================================================================
 
 export class MemStorage implements IStorage {
   private users: Map<string, User>;
+  private companies: Map<string, Company>;
+  private companySettings: Map<string, CompanySettings>;
+  private fiscalPeriods: Map<string, FiscalPeriod>;
+  private roles: Map<string, Role>;
+  private userCompanyRoles: Map<string, UserCompanyRole>;
+  private accounts: Map<string, Account>;
+  private warehouses: Map<string, Warehouse>;
+  private products: Map<string, Product>;
+  private customers: Map<string, Customer>;
+  private vendors: Map<string, Vendor>;
+  private taxes: Map<string, Tax>;
+  private salesOrders: Map<string, SalesOrder>;
+  private purchaseOrders: Map<string, PurchaseOrder>;
+  private intercompanyTransfers: Map<string, IntercompanyTransfer>;
+  private sharedAccess: Map<string, SharedAccess>;
 
   constructor() {
     this.users = new Map();
+    this.companies = new Map();
+    this.companySettings = new Map();
+    this.fiscalPeriods = new Map();
+    this.roles = new Map();
+    this.userCompanyRoles = new Map();
+    this.accounts = new Map();
+    this.warehouses = new Map();
+    this.products = new Map();
+    this.customers = new Map();
+    this.vendors = new Map();
+    this.taxes = new Map();
+    this.salesOrders = new Map();
+    this.purchaseOrders = new Map();
+    this.intercompanyTransfers = new Map();
+    this.sharedAccess = new Map();
+    
+    // Initialize with default data
+    this.initializeDefaultData();
   }
 
+  private initializeDefaultData() {
+    // Create default roles
+    const adminRole: Role = {
+      id: "role-admin",
+      code: "ADMIN",
+      name: "Administrator",
+      description: "Full system access",
+      isSystemRole: true,
+      permissions: ["*"],
+      createdAt: new Date(),
+    };
+    
+    const managerRole: Role = {
+      id: "role-manager",
+      code: "MANAGER",
+      name: "Manager",
+      description: "Department manager access",
+      isSystemRole: true,
+      permissions: ["read:*", "write:*", "delete:own"],
+      createdAt: new Date(),
+    };
+    
+    const userRole: Role = {
+      id: "role-user",
+      code: "USER",
+      name: "User",
+      description: "Standard user access",
+      isSystemRole: true,
+      permissions: ["read:*", "write:own"],
+      createdAt: new Date(),
+    };
+    
+    this.roles.set(adminRole.id, adminRole);
+    this.roles.set(managerRole.id, managerRole);
+    this.roles.set(userRole.id, userRole);
+
+    // Create sample company hierarchy
+    const holdingCompany: Company = {
+      id: "comp-holding",
+      code: "UNANZA-HQ",
+      name: "Unanza Holdings Ltd",
+      legalName: "Unanza Holdings Limited",
+      taxId: "12-3456789",
+      parentId: null,
+      path: "UNANZA-HQ",
+      level: 1,
+      companyType: "holding",
+      currency: "USD",
+      locale: "en-US",
+      timezone: "America/New_York",
+      address: "100 Corporate Drive",
+      city: "New York",
+      state: "NY",
+      country: "US",
+      postalCode: "10001",
+      phone: "+1-212-555-0100",
+      email: "contact@unanza.com",
+      website: "https://unanza.com",
+      logoUrl: null,
+      consolidationEnabled: true,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const usSubsidiary: Company = {
+      id: "comp-us",
+      code: "UNANZA-US",
+      name: "Unanza USA Inc.",
+      legalName: "Unanza USA Incorporated",
+      taxId: "98-7654321",
+      parentId: "comp-holding",
+      path: "UNANZA-HQ/UNANZA-US",
+      level: 2,
+      companyType: "subsidiary",
+      currency: "USD",
+      locale: "en-US",
+      timezone: "America/New_York",
+      address: "200 Main Street",
+      city: "Boston",
+      state: "MA",
+      country: "US",
+      postalCode: "02101",
+      phone: "+1-617-555-0200",
+      email: "usa@unanza.com",
+      website: null,
+      logoUrl: null,
+      consolidationEnabled: false,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const euSubsidiary: Company = {
+      id: "comp-eu",
+      code: "UNANZA-EU",
+      name: "Unanza Europe GmbH",
+      legalName: "Unanza Europe GmbH",
+      taxId: "DE123456789",
+      parentId: "comp-holding",
+      path: "UNANZA-HQ/UNANZA-EU",
+      level: 2,
+      companyType: "subsidiary",
+      currency: "EUR",
+      locale: "de-DE",
+      timezone: "Europe/Berlin",
+      address: "Hauptstrasse 50",
+      city: "Frankfurt",
+      state: "HE",
+      country: "DE",
+      postalCode: "60311",
+      phone: "+49-69-555-0300",
+      email: "europe@unanza.com",
+      website: null,
+      logoUrl: null,
+      consolidationEnabled: false,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const ukBranch: Company = {
+      id: "comp-uk",
+      code: "UNANZA-UK",
+      name: "Unanza UK Branch",
+      legalName: "Unanza UK",
+      taxId: "GB123456789",
+      parentId: "comp-eu",
+      path: "UNANZA-HQ/UNANZA-EU/UNANZA-UK",
+      level: 3,
+      companyType: "branch",
+      currency: "GBP",
+      locale: "en-GB",
+      timezone: "Europe/London",
+      address: "10 High Street",
+      city: "London",
+      state: null,
+      country: "GB",
+      postalCode: "EC1A 1BB",
+      phone: "+44-20-555-0400",
+      email: "uk@unanza.com",
+      website: null,
+      logoUrl: null,
+      consolidationEnabled: false,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const asiaPacific: Company = {
+      id: "comp-apac",
+      code: "UNANZA-APAC",
+      name: "Unanza Asia Pacific Pte Ltd",
+      legalName: "Unanza Asia Pacific Private Limited",
+      taxId: "SG12345678",
+      parentId: "comp-holding",
+      path: "UNANZA-HQ/UNANZA-APAC",
+      level: 2,
+      companyType: "subsidiary",
+      currency: "SGD",
+      locale: "en-SG",
+      timezone: "Asia/Singapore",
+      address: "1 Raffles Place",
+      city: "Singapore",
+      state: null,
+      country: "SG",
+      postalCode: "048616",
+      phone: "+65-6555-0500",
+      email: "apac@unanza.com",
+      website: null,
+      logoUrl: null,
+      consolidationEnabled: false,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    this.companies.set(holdingCompany.id, holdingCompany);
+    this.companies.set(usSubsidiary.id, usSubsidiary);
+    this.companies.set(euSubsidiary.id, euSubsidiary);
+    this.companies.set(ukBranch.id, ukBranch);
+    this.companies.set(asiaPacific.id, asiaPacific);
+
+    // Create default admin user
+    const adminUser: User = {
+      id: "user-admin",
+      username: "admin",
+      password: "admin123", // In production, this would be hashed
+      email: "admin@unanza.com",
+      fullName: "System Administrator",
+      avatarUrl: null,
+      defaultCompanyId: "comp-holding",
+      isActive: true,
+      lastLoginAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    this.users.set(adminUser.id, adminUser);
+
+    // Assign admin to all companies
+    const companiesArr = [holdingCompany, usSubsidiary, euSubsidiary, ukBranch, asiaPacific];
+    companiesArr.forEach((company, index) => {
+      const assignment: UserCompanyRole = {
+        id: `ucr-admin-${company.id}`,
+        userId: adminUser.id,
+        companyId: company.id,
+        roleId: adminRole.id,
+        isDefault: index === 0,
+        grantedAt: new Date(),
+        grantedBy: null,
+        expiresAt: null,
+        isActive: true,
+      };
+      this.userCompanyRoles.set(assignment.id, assignment);
+    });
+  }
+
+  // ===================== USERS =====================
   async getUser(id: string): Promise<User | undefined> {
     return this.users.get(id);
   }
@@ -29,9 +404,718 @@ export class MemStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = randomUUID();
-    const user: User = { ...insertUser, id };
+    const user: User = { 
+      id,
+      username: insertUser.username,
+      password: insertUser.password,
+      email: insertUser.email ?? null,
+      fullName: insertUser.fullName ?? null,
+      avatarUrl: null,
+      defaultCompanyId: null,
+      isActive: true,
+      lastLoginAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
     this.users.set(id, user);
     return user;
+  }
+
+  async updateUser(id: string, updates: Partial<User>): Promise<User | undefined> {
+    const user = this.users.get(id);
+    if (!user) return undefined;
+    const updated = { ...user, ...updates, updatedAt: new Date() };
+    this.users.set(id, updated);
+    return updated;
+  }
+
+  // ===================== COMPANIES =====================
+  async getCompany(id: string): Promise<Company | undefined> {
+    return this.companies.get(id);
+  }
+
+  async getCompanyByCode(code: string): Promise<Company | undefined> {
+    return Array.from(this.companies.values()).find(c => c.code === code);
+  }
+
+  async getCompanies(): Promise<Company[]> {
+    return Array.from(this.companies.values()).filter(c => c.isActive);
+  }
+
+  async getChildCompanies(parentId: string): Promise<Company[]> {
+    return Array.from(this.companies.values()).filter(
+      c => c.parentId === parentId && c.isActive
+    );
+  }
+
+  async getCompanyHierarchy(rootId?: string): Promise<CompanyHierarchyNode[]> {
+    const buildTree = (parentId: string | null, level: number): CompanyHierarchyNode[] => {
+      const children = Array.from(this.companies.values())
+        .filter(c => c.parentId === parentId && c.isActive)
+        .map(company => ({
+          company,
+          children: buildTree(company.id, level + 1),
+          level,
+        }));
+      return children;
+    };
+
+    if (rootId) {
+      const root = this.companies.get(rootId);
+      if (!root) return [];
+      return [{
+        company: root,
+        children: buildTree(rootId, 2),
+        level: 1,
+      }];
+    }
+
+    // Return all root companies (no parent)
+    return Array.from(this.companies.values())
+      .filter(c => !c.parentId && c.isActive)
+      .map(company => ({
+        company,
+        children: buildTree(company.id, 2),
+        level: 1,
+      }));
+  }
+
+  async createCompany(insertCompany: InsertCompany): Promise<Company> {
+    const id = randomUUID();
+    const company: Company = {
+      id,
+      code: insertCompany.code,
+      name: insertCompany.name,
+      legalName: insertCompany.legalName ?? null,
+      taxId: insertCompany.taxId ?? null,
+      parentId: insertCompany.parentId ?? null,
+      path: insertCompany.path,
+      level: insertCompany.level ?? 1,
+      companyType: insertCompany.companyType ?? "subsidiary",
+      currency: insertCompany.currency ?? "USD",
+      locale: insertCompany.locale ?? "en-US",
+      timezone: insertCompany.timezone ?? "UTC",
+      address: insertCompany.address ?? null,
+      city: insertCompany.city ?? null,
+      state: insertCompany.state ?? null,
+      country: insertCompany.country ?? null,
+      postalCode: insertCompany.postalCode ?? null,
+      phone: insertCompany.phone ?? null,
+      email: insertCompany.email ?? null,
+      website: insertCompany.website ?? null,
+      logoUrl: insertCompany.logoUrl ?? null,
+      consolidationEnabled: insertCompany.consolidationEnabled ?? false,
+      isActive: insertCompany.isActive ?? true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.companies.set(id, company);
+    return company;
+  }
+
+  async updateCompany(id: string, updates: Partial<Company>): Promise<Company | undefined> {
+    const company = this.companies.get(id);
+    if (!company) return undefined;
+    const updated = { ...company, ...updates, updatedAt: new Date() };
+    this.companies.set(id, updated);
+    return updated;
+  }
+
+  // ===================== COMPANY SETTINGS =====================
+  async getCompanySettings(companyId: string): Promise<CompanySettings | undefined> {
+    return Array.from(this.companySettings.values()).find(s => s.companyId === companyId);
+  }
+
+  async createCompanySettings(settings: InsertCompanySettings): Promise<CompanySettings> {
+    const id = randomUUID();
+    const newSettings: CompanySettings = {
+      id,
+      companyId: settings.companyId,
+      fiscalYearStart: settings.fiscalYearStart ?? 1,
+      fiscalYearEnd: settings.fiscalYearEnd ?? 12,
+      taxRegime: settings.taxRegime ?? null,
+      defaultPaymentTerms: settings.defaultPaymentTerms ?? 30,
+      inventoryCostingMethod: settings.inventoryCostingMethod ?? "fifo",
+      defaultWarehouseId: settings.defaultWarehouseId ?? null,
+      multiCurrencyEnabled: settings.multiCurrencyEnabled ?? false,
+      intercompanyEnabled: settings.intercompanyEnabled ?? true,
+      autoPostIntercompany: settings.autoPostIntercompany ?? false,
+      consolidationRules: settings.consolidationRules ?? null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.companySettings.set(id, newSettings);
+    return newSettings;
+  }
+
+  async updateCompanySettings(companyId: string, updates: Partial<CompanySettings>): Promise<CompanySettings | undefined> {
+    const settings = await this.getCompanySettings(companyId);
+    if (!settings) return undefined;
+    const updated = { ...settings, ...updates, updatedAt: new Date() };
+    this.companySettings.set(settings.id, updated);
+    return updated;
+  }
+
+  // ===================== FISCAL PERIODS =====================
+  async getFiscalPeriods(companyId: string): Promise<FiscalPeriod[]> {
+    return Array.from(this.fiscalPeriods.values()).filter(p => p.companyId === companyId);
+  }
+
+  async getFiscalPeriod(id: string): Promise<FiscalPeriod | undefined> {
+    return this.fiscalPeriods.get(id);
+  }
+
+  async getCurrentFiscalPeriod(companyId: string): Promise<FiscalPeriod | undefined> {
+    const now = new Date();
+    return Array.from(this.fiscalPeriods.values()).find(
+      p => p.companyId === companyId && 
+           p.startDate <= now && 
+           p.endDate >= now && 
+           p.status === "open"
+    );
+  }
+
+  async createFiscalPeriod(period: InsertFiscalPeriod): Promise<FiscalPeriod> {
+    const id = randomUUID();
+    const newPeriod: FiscalPeriod = {
+      id,
+      companyId: period.companyId,
+      periodCode: period.periodCode,
+      periodName: period.periodName,
+      periodType: period.periodType ?? "month",
+      startDate: period.startDate,
+      endDate: period.endDate,
+      status: period.status ?? "open",
+      isClosed: period.isClosed ?? false,
+      closedAt: period.closedAt ?? null,
+      closedBy: period.closedBy ?? null,
+      createdAt: new Date(),
+    };
+    this.fiscalPeriods.set(id, newPeriod);
+    return newPeriod;
+  }
+
+  async closeFiscalPeriod(id: string, closedBy: string): Promise<FiscalPeriod | undefined> {
+    const period = this.fiscalPeriods.get(id);
+    if (!period) return undefined;
+    const updated = { 
+      ...period, 
+      status: "closed" as const, 
+      isClosed: true, 
+      closedAt: new Date(), 
+      closedBy 
+    };
+    this.fiscalPeriods.set(id, updated);
+    return updated;
+  }
+
+  // ===================== ROLES =====================
+  async getRole(id: string): Promise<Role | undefined> {
+    return this.roles.get(id);
+  }
+
+  async getRoleByCode(code: string): Promise<Role | undefined> {
+    return Array.from(this.roles.values()).find(r => r.code === code);
+  }
+
+  async getRoles(): Promise<Role[]> {
+    return Array.from(this.roles.values());
+  }
+
+  async createRole(role: InsertRole): Promise<Role> {
+    const id = randomUUID();
+    const newRole: Role = {
+      id,
+      code: role.code,
+      name: role.name,
+      description: role.description ?? null,
+      isSystemRole: role.isSystemRole ?? false,
+      permissions: role.permissions ?? [],
+      createdAt: new Date(),
+    };
+    this.roles.set(id, newRole);
+    return newRole;
+  }
+
+  // ===================== USER COMPANY ROLES =====================
+  async getUserCompanyRoles(userId: string): Promise<UserCompanyRole[]> {
+    return Array.from(this.userCompanyRoles.values()).filter(
+      ucr => ucr.userId === userId && ucr.isActive
+    );
+  }
+
+  async getUserCompanies(userId: string): Promise<Company[]> {
+    const roles = await this.getUserCompanyRoles(userId);
+    const companyIds = roles.map(r => r.companyId);
+    return Array.from(this.companies.values()).filter(
+      c => companyIds.includes(c.id) && c.isActive
+    );
+  }
+
+  async getUserRole(userId: string, companyId: string): Promise<Role | undefined> {
+    const assignment = Array.from(this.userCompanyRoles.values()).find(
+      ucr => ucr.userId === userId && ucr.companyId === companyId && ucr.isActive
+    );
+    if (!assignment) return undefined;
+    return this.roles.get(assignment.roleId);
+  }
+
+  async assignUserToCompany(assignment: InsertUserCompanyRole): Promise<UserCompanyRole> {
+    const id = randomUUID();
+    const newAssignment: UserCompanyRole = {
+      id,
+      userId: assignment.userId,
+      companyId: assignment.companyId,
+      roleId: assignment.roleId,
+      isDefault: assignment.isDefault ?? false,
+      grantedAt: new Date(),
+      grantedBy: assignment.grantedBy ?? null,
+      expiresAt: assignment.expiresAt ?? null,
+      isActive: assignment.isActive ?? true,
+    };
+    this.userCompanyRoles.set(id, newAssignment);
+    return newAssignment;
+  }
+
+  async removeUserFromCompany(userId: string, companyId: string): Promise<void> {
+    const entries = Array.from(this.userCompanyRoles.entries());
+    for (const [id, ucr] of entries) {
+      if (ucr.userId === userId && ucr.companyId === companyId) {
+        this.userCompanyRoles.delete(id);
+      }
+    }
+  }
+
+  // ===================== COMPANY CONTEXT =====================
+  async getCompanyContext(userId: string, companyId: string): Promise<CompanyContext | undefined> {
+    const user = await this.getUser(userId);
+    if (!user) return undefined;
+
+    const company = await this.getCompany(companyId);
+    if (!company) return undefined;
+
+    const userCompanies = await this.getUserCompanies(userId);
+    if (!userCompanies.find(c => c.id === companyId)) return undefined;
+
+    const role = await this.getUserRole(userId, companyId);
+    const permissions = role ? (role.permissions as string[]) : [];
+
+    return {
+      activeCompanyId: companyId,
+      activeCompany: company,
+      userCompanies,
+      permissions,
+      role: role || null,
+    };
+  }
+
+  // ===================== CHART OF ACCOUNTS =====================
+  async getAccounts(companyId: string): Promise<Account[]> {
+    return Array.from(this.accounts.values()).filter(a => a.companyId === companyId);
+  }
+
+  async getAccount(id: string): Promise<Account | undefined> {
+    return this.accounts.get(id);
+  }
+
+  async getAccountByCode(companyId: string, accountCode: string): Promise<Account | undefined> {
+    return Array.from(this.accounts.values()).find(
+      a => a.companyId === companyId && a.accountCode === accountCode
+    );
+  }
+
+  async createAccount(account: InsertAccount): Promise<Account> {
+    const id = randomUUID();
+    const newAccount: Account = {
+      id,
+      companyId: account.companyId,
+      accountCode: account.accountCode,
+      name: account.name,
+      accountType: account.accountType,
+      level: account.level ?? 1,
+      parentId: account.parentId ?? null,
+      balance: account.balance ?? "0",
+      isPostable: account.isPostable ?? true,
+      isActive: account.isActive ?? true,
+      consolidationAccountId: account.consolidationAccountId ?? null,
+      createdAt: new Date(),
+    };
+    this.accounts.set(id, newAccount);
+    return newAccount;
+  }
+
+  async updateAccount(id: string, updates: Partial<Account>): Promise<Account | undefined> {
+    const account = this.accounts.get(id);
+    if (!account) return undefined;
+    const updated = { ...account, ...updates };
+    this.accounts.set(id, updated);
+    return updated;
+  }
+
+  // ===================== WAREHOUSES =====================
+  async getWarehouses(companyId: string): Promise<Warehouse[]> {
+    return Array.from(this.warehouses.values()).filter(w => w.companyId === companyId);
+  }
+
+  async getWarehouse(id: string): Promise<Warehouse | undefined> {
+    return this.warehouses.get(id);
+  }
+
+  async createWarehouse(warehouse: InsertWarehouse): Promise<Warehouse> {
+    const id = randomUUID();
+    const newWarehouse: Warehouse = {
+      id,
+      companyId: warehouse.companyId,
+      code: warehouse.code,
+      name: warehouse.name,
+      warehouseType: warehouse.warehouseType ?? "standard",
+      address: warehouse.address ?? null,
+      city: warehouse.city ?? null,
+      state: warehouse.state ?? null,
+      country: warehouse.country ?? null,
+      managerId: warehouse.managerId ?? null,
+      isActive: warehouse.isActive ?? true,
+      allowNegativeStock: warehouse.allowNegativeStock ?? false,
+      createdAt: new Date(),
+    };
+    this.warehouses.set(id, newWarehouse);
+    return newWarehouse;
+  }
+
+  async updateWarehouse(id: string, updates: Partial<Warehouse>): Promise<Warehouse | undefined> {
+    const warehouse = this.warehouses.get(id);
+    if (!warehouse) return undefined;
+    const updated = { ...warehouse, ...updates };
+    this.warehouses.set(id, updated);
+    return updated;
+  }
+
+  // ===================== PRODUCTS =====================
+  async getProducts(companyId: string): Promise<Product[]> {
+    return Array.from(this.products.values()).filter(p => p.companyId === companyId);
+  }
+
+  async getProduct(id: string): Promise<Product | undefined> {
+    return this.products.get(id);
+  }
+
+  async getProductBySku(companyId: string, sku: string): Promise<Product | undefined> {
+    return Array.from(this.products.values()).find(
+      p => p.companyId === companyId && p.sku === sku
+    );
+  }
+
+  async createProduct(product: InsertProduct): Promise<Product> {
+    const id = randomUUID();
+    const newProduct: Product = {
+      id,
+      companyId: product.companyId,
+      sku: product.sku,
+      name: product.name,
+      description: product.description ?? null,
+      category: product.category ?? null,
+      uom: product.uom ?? "EA",
+      price: product.price ?? "0",
+      cost: product.cost ?? "0",
+      minStockLevel: product.minStockLevel ?? 0,
+      maxStockLevel: product.maxStockLevel ?? null,
+      reorderPoint: product.reorderPoint ?? null,
+      isActive: product.isActive ?? true,
+      isSellable: product.isSellable ?? true,
+      isPurchasable: product.isPurchasable ?? true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.products.set(id, newProduct);
+    return newProduct;
+  }
+
+  async updateProduct(id: string, updates: Partial<Product>): Promise<Product | undefined> {
+    const product = this.products.get(id);
+    if (!product) return undefined;
+    const updated = { ...product, ...updates, updatedAt: new Date() };
+    this.products.set(id, updated);
+    return updated;
+  }
+
+  // ===================== CUSTOMERS =====================
+  async getCustomers(companyId: string): Promise<Customer[]> {
+    return Array.from(this.customers.values()).filter(c => c.companyId === companyId);
+  }
+
+  async getCustomer(id: string): Promise<Customer | undefined> {
+    return this.customers.get(id);
+  }
+
+  async createCustomer(customer: InsertCustomer): Promise<Customer> {
+    const id = randomUUID();
+    const newCustomer: Customer = {
+      id,
+      companyId: customer.companyId,
+      code: customer.code,
+      name: customer.name,
+      legalName: customer.legalName ?? null,
+      taxId: customer.taxId ?? null,
+      email: customer.email ?? null,
+      phone: customer.phone ?? null,
+      address: customer.address ?? null,
+      city: customer.city ?? null,
+      state: customer.state ?? null,
+      country: customer.country ?? null,
+      postalCode: customer.postalCode ?? null,
+      paymentTerms: customer.paymentTerms ?? 30,
+      creditLimit: customer.creditLimit ?? null,
+      currentBalance: customer.currentBalance ?? "0",
+      customerType: customer.customerType ?? "regular",
+      isActive: customer.isActive ?? true,
+      isIntercompany: customer.isIntercompany ?? false,
+      linkedCompanyId: customer.linkedCompanyId ?? null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.customers.set(id, newCustomer);
+    return newCustomer;
+  }
+
+  async updateCustomer(id: string, updates: Partial<Customer>): Promise<Customer | undefined> {
+    const customer = this.customers.get(id);
+    if (!customer) return undefined;
+    const updated = { ...customer, ...updates, updatedAt: new Date() };
+    this.customers.set(id, updated);
+    return updated;
+  }
+
+  // ===================== VENDORS =====================
+  async getVendors(companyId: string): Promise<Vendor[]> {
+    return Array.from(this.vendors.values()).filter(v => v.companyId === companyId);
+  }
+
+  async getVendor(id: string): Promise<Vendor | undefined> {
+    return this.vendors.get(id);
+  }
+
+  async createVendor(vendor: InsertVendor): Promise<Vendor> {
+    const id = randomUUID();
+    const newVendor: Vendor = {
+      id,
+      companyId: vendor.companyId,
+      code: vendor.code,
+      name: vendor.name,
+      legalName: vendor.legalName ?? null,
+      taxId: vendor.taxId ?? null,
+      email: vendor.email ?? null,
+      phone: vendor.phone ?? null,
+      address: vendor.address ?? null,
+      city: vendor.city ?? null,
+      state: vendor.state ?? null,
+      country: vendor.country ?? null,
+      postalCode: vendor.postalCode ?? null,
+      paymentTerms: vendor.paymentTerms ?? 30,
+      vendorType: vendor.vendorType ?? "regular",
+      isActive: vendor.isActive ?? true,
+      isIntercompany: vendor.isIntercompany ?? false,
+      linkedCompanyId: vendor.linkedCompanyId ?? null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.vendors.set(id, newVendor);
+    return newVendor;
+  }
+
+  async updateVendor(id: string, updates: Partial<Vendor>): Promise<Vendor | undefined> {
+    const vendor = this.vendors.get(id);
+    if (!vendor) return undefined;
+    const updated = { ...vendor, ...updates, updatedAt: new Date() };
+    this.vendors.set(id, updated);
+    return updated;
+  }
+
+  // ===================== TAXES =====================
+  async getTaxes(companyId: string): Promise<Tax[]> {
+    return Array.from(this.taxes.values()).filter(t => t.companyId === companyId);
+  }
+
+  async getTax(id: string): Promise<Tax | undefined> {
+    return this.taxes.get(id);
+  }
+
+  async createTax(tax: InsertTax): Promise<Tax> {
+    const id = randomUUID();
+    const newTax: Tax = {
+      id,
+      companyId: tax.companyId,
+      code: tax.code,
+      name: tax.name,
+      rate: tax.rate,
+      taxType: tax.taxType ?? "sales",
+      isDefault: tax.isDefault ?? false,
+      isActive: tax.isActive ?? true,
+      accountId: tax.accountId ?? null,
+      createdAt: new Date(),
+    };
+    this.taxes.set(id, newTax);
+    return newTax;
+  }
+
+  // ===================== SALES ORDERS =====================
+  async getSalesOrders(companyId: string): Promise<SalesOrder[]> {
+    return Array.from(this.salesOrders.values()).filter(o => o.companyId === companyId);
+  }
+
+  async getSalesOrder(id: string): Promise<SalesOrder | undefined> {
+    return this.salesOrders.get(id);
+  }
+
+  async createSalesOrder(order: InsertSalesOrder): Promise<SalesOrder> {
+    const id = randomUUID();
+    const newOrder: SalesOrder = {
+      id,
+      companyId: order.companyId,
+      orderNumber: order.orderNumber,
+      customerId: order.customerId,
+      orderDate: order.orderDate ?? new Date(),
+      requiredDate: order.requiredDate ?? null,
+      status: order.status ?? "draft",
+      subtotal: order.subtotal ?? "0",
+      taxAmount: order.taxAmount ?? "0",
+      total: order.total ?? "0",
+      fiscalPeriodId: order.fiscalPeriodId ?? null,
+      warehouseId: order.warehouseId ?? null,
+      isIntercompany: order.isIntercompany ?? false,
+      counterpartyCompanyId: order.counterpartyCompanyId ?? null,
+      linkedPurchaseOrderId: order.linkedPurchaseOrderId ?? null,
+      notes: order.notes ?? null,
+      createdBy: order.createdBy ?? null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.salesOrders.set(id, newOrder);
+    return newOrder;
+  }
+
+  async updateSalesOrder(id: string, updates: Partial<SalesOrder>): Promise<SalesOrder | undefined> {
+    const order = this.salesOrders.get(id);
+    if (!order) return undefined;
+    const updated = { ...order, ...updates, updatedAt: new Date() };
+    this.salesOrders.set(id, updated);
+    return updated;
+  }
+
+  // ===================== PURCHASE ORDERS =====================
+  async getPurchaseOrders(companyId: string): Promise<PurchaseOrder[]> {
+    return Array.from(this.purchaseOrders.values()).filter(o => o.companyId === companyId);
+  }
+
+  async getPurchaseOrder(id: string): Promise<PurchaseOrder | undefined> {
+    return this.purchaseOrders.get(id);
+  }
+
+  async createPurchaseOrder(order: InsertPurchaseOrder): Promise<PurchaseOrder> {
+    const id = randomUUID();
+    const newOrder: PurchaseOrder = {
+      id,
+      companyId: order.companyId,
+      orderNumber: order.orderNumber,
+      vendorId: order.vendorId,
+      orderDate: order.orderDate ?? new Date(),
+      expectedDate: order.expectedDate ?? null,
+      status: order.status ?? "draft",
+      subtotal: order.subtotal ?? "0",
+      taxAmount: order.taxAmount ?? "0",
+      total: order.total ?? "0",
+      fiscalPeriodId: order.fiscalPeriodId ?? null,
+      warehouseId: order.warehouseId ?? null,
+      isIntercompany: order.isIntercompany ?? false,
+      counterpartyCompanyId: order.counterpartyCompanyId ?? null,
+      linkedSalesOrderId: order.linkedSalesOrderId ?? null,
+      notes: order.notes ?? null,
+      createdBy: order.createdBy ?? null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.purchaseOrders.set(id, newOrder);
+    return newOrder;
+  }
+
+  async updatePurchaseOrder(id: string, updates: Partial<PurchaseOrder>): Promise<PurchaseOrder | undefined> {
+    const order = this.purchaseOrders.get(id);
+    if (!order) return undefined;
+    const updated = { ...order, ...updates, updatedAt: new Date() };
+    this.purchaseOrders.set(id, updated);
+    return updated;
+  }
+
+  // ===================== INTERCOMPANY TRANSFERS =====================
+  async getIntercompanyTransfers(companyId: string): Promise<IntercompanyTransfer[]> {
+    return Array.from(this.intercompanyTransfers.values()).filter(
+      t => t.sourceCompanyId === companyId || t.targetCompanyId === companyId
+    );
+  }
+
+  async getIntercompanyTransfer(id: string): Promise<IntercompanyTransfer | undefined> {
+    return this.intercompanyTransfers.get(id);
+  }
+
+  async createIntercompanyTransfer(transfer: InsertIntercompanyTransfer): Promise<IntercompanyTransfer> {
+    const id = randomUUID();
+    const newTransfer: IntercompanyTransfer = {
+      id,
+      transferNumber: transfer.transferNumber,
+      sourceCompanyId: transfer.sourceCompanyId,
+      targetCompanyId: transfer.targetCompanyId,
+      sourceWarehouseId: transfer.sourceWarehouseId,
+      targetWarehouseId: transfer.targetWarehouseId,
+      transferDate: transfer.transferDate ?? new Date(),
+      status: transfer.status ?? "draft",
+      totalValue: transfer.totalValue ?? "0",
+      sourceSalesOrderId: transfer.sourceSalesOrderId ?? null,
+      targetPurchaseOrderId: transfer.targetPurchaseOrderId ?? null,
+      notes: transfer.notes ?? null,
+      createdBy: transfer.createdBy ?? null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.intercompanyTransfers.set(id, newTransfer);
+    return newTransfer;
+  }
+
+  async updateIntercompanyTransfer(id: string, updates: Partial<IntercompanyTransfer>): Promise<IntercompanyTransfer | undefined> {
+    const transfer = this.intercompanyTransfers.get(id);
+    if (!transfer) return undefined;
+    const updated = { ...transfer, ...updates, updatedAt: new Date() };
+    this.intercompanyTransfers.set(id, updated);
+    return updated;
+  }
+
+  // ===================== SHARED ACCESS =====================
+  async getSharedAccess(granteeCompanyId: string, entityType: string): Promise<SharedAccess[]> {
+    return Array.from(this.sharedAccess.values()).filter(
+      sa => sa.granteeCompanyId === granteeCompanyId && 
+            sa.entityType === entityType && 
+            sa.isActive
+    );
+  }
+
+  async grantSharedAccess(access: InsertSharedAccess): Promise<SharedAccess> {
+    const id = randomUUID();
+    const newAccess: SharedAccess = {
+      id,
+      entityType: access.entityType,
+      entityId: access.entityId,
+      ownerCompanyId: access.ownerCompanyId,
+      granteeCompanyId: access.granteeCompanyId,
+      accessLevel: access.accessLevel ?? "read",
+      grantedAt: new Date(),
+      grantedBy: access.grantedBy ?? null,
+      expiresAt: access.expiresAt ?? null,
+      isActive: access.isActive ?? true,
+    };
+    this.sharedAccess.set(id, newAccess);
+    return newAccess;
+  }
+
+  async revokeSharedAccess(id: string): Promise<void> {
+    this.sharedAccess.delete(id);
   }
 }
 

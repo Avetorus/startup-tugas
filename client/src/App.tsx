@@ -5,11 +5,14 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { CompanyProvider } from "@/contexts/CompanyContext";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { CompanySwitcher } from "@/components/CompanySwitcher";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 
 import { Dashboard } from "@/components/Dashboard";
 import { Reports } from "@/components/Reports";
+import { ConsolidationReports } from "@/components/reports/ConsolidationReports";
 import { SalesOrderList } from "@/components/sales/SalesOrderList";
 import { CustomerList } from "@/components/sales/CustomerList";
 import { DeliveryList } from "@/components/sales/DeliveryList";
@@ -27,6 +30,9 @@ import { EmployeeList } from "@/components/hr/EmployeeList";
 import { AttendanceList } from "@/components/hr/AttendanceList";
 import { LeaveRequests } from "@/components/hr/LeaveRequests";
 import { Payroll } from "@/components/hr/Payroll";
+import { CompanyManagement } from "@/components/system/CompanyManagement";
+import { UserRoleManagement } from "@/components/system/UserRoleManagement";
+import { InterCompanyTransactions } from "@/components/system/InterCompanyTransactions";
 import { VendorPortal } from "@/components/system/VendorPortal";
 import { CustomerPortal } from "@/components/system/CustomerPortal";
 import { Settings } from "@/components/system/Settings";
@@ -36,6 +42,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/reports" component={Reports} />
+      <Route path="/reports/consolidation" component={ConsolidationReports} />
       
       <Route path="/sales/orders" component={SalesOrderList} />
       <Route path="/sales/customers" component={CustomerList} />
@@ -58,6 +65,9 @@ function Router() {
       <Route path="/hr/leave" component={LeaveRequests} />
       <Route path="/hr/payroll" component={Payroll} />
       
+      <Route path="/system/companies" component={CompanyManagement} />
+      <Route path="/system/users" component={UserRoleManagement} />
+      <Route path="/system/intercompany" component={InterCompanyTransactions} />
       <Route path="/system/vendors" component={VendorPortal} />
       <Route path="/system/customer-portal" component={CustomerPortal} />
       <Route path="/system/settings" component={Settings} />
@@ -83,23 +93,28 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <TooltipProvider>
-          <SidebarProvider style={style as React.CSSProperties}>
-            <div className="flex h-screen w-full">
-              <AppSidebar />
-              <div className="flex flex-col flex-1 min-w-0">
-                <header className="flex items-center justify-between gap-2 p-3 border-b shrink-0">
-                  <SidebarTrigger data-testid="button-sidebar-toggle" />
-                  <ThemeToggle />
-                </header>
-                <main className="flex-1 overflow-auto p-6">
-                  <Router />
-                </main>
+        <CompanyProvider>
+          <TooltipProvider>
+            <SidebarProvider style={style as React.CSSProperties}>
+              <div className="flex h-screen w-full">
+                <AppSidebar />
+                <div className="flex flex-col flex-1 min-w-0">
+                  <header className="flex items-center justify-between gap-2 p-3 border-b shrink-0">
+                    <div className="flex items-center gap-2">
+                      <SidebarTrigger data-testid="button-sidebar-toggle" />
+                      <CompanySwitcher />
+                    </div>
+                    <ThemeToggle />
+                  </header>
+                  <main className="flex-1 overflow-auto p-6">
+                    <Router />
+                  </main>
+                </div>
               </div>
-            </div>
-          </SidebarProvider>
-          <Toaster />
-        </TooltipProvider>
+            </SidebarProvider>
+            <Toaster />
+          </TooltipProvider>
+        </CompanyProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

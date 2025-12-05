@@ -41,6 +41,9 @@ import {
   Settings,
   ChevronDown,
   LayoutDashboard,
+  Globe,
+  Shield,
+  GitMerge,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -102,6 +105,9 @@ const menuGroups: MenuGroup[] = [
     label: "System",
     icon: Settings,
     items: [
+      { title: "Companies", url: "/system/companies", icon: Globe },
+      { title: "Users & Roles", url: "/system/users", icon: Shield },
+      { title: "Inter-Company", url: "/system/intercompany", icon: GitMerge },
       { title: "Vendor Portal", url: "/system/vendors", icon: Building2 },
       { title: "Customer Portal", url: "/system/customer-portal", icon: Store },
       { title: "Settings", url: "/system/settings", icon: Settings },
@@ -147,6 +153,14 @@ export function AppSidebar() {
                   <Link href="/reports" data-testid="link-reports">
                     <PieChart className="h-4 w-4" />
                     <span>Reports</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={location === "/reports/consolidation"}>
+                  <Link href="/reports/consolidation" data-testid="link-consolidation">
+                    <Building2 className="h-4 w-4" />
+                    <span>Consolidation</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
