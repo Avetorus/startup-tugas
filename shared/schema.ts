@@ -1028,6 +1028,14 @@ export const insertSalesOrderSchema = createInsertSchema(salesOrders).omit({
 export type InsertSalesOrder = z.infer<typeof insertSalesOrderSchema>;
 export type SalesOrder = typeof salesOrders.$inferSelect;
 
+// Sales Order Line schemas
+export const insertSalesOrderLineSchema = createInsertSchema(salesOrderLines).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertSalesOrderLine = z.infer<typeof insertSalesOrderLineSchema>;
+export type SalesOrderLine = typeof salesOrderLines.$inferSelect;
+
 // Purchase Order schemas
 export const insertPurchaseOrderSchema = createInsertSchema(purchaseOrders).omit({
   id: true,
@@ -1036,6 +1044,14 @@ export const insertPurchaseOrderSchema = createInsertSchema(purchaseOrders).omit
 });
 export type InsertPurchaseOrder = z.infer<typeof insertPurchaseOrderSchema>;
 export type PurchaseOrder = typeof purchaseOrders.$inferSelect;
+
+// Purchase Order Line schemas
+export const insertPurchaseOrderLineSchema = createInsertSchema(purchaseOrderLines).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertPurchaseOrderLine = z.infer<typeof insertPurchaseOrderLineSchema>;
+export type PurchaseOrderLine = typeof purchaseOrderLines.$inferSelect;
 
 // Intercompany Transfer schemas
 export const insertIntercompanyTransferSchema = createInsertSchema(intercompanyTransfers).omit({

@@ -13,7 +13,9 @@ import {
   type Tax, type InsertTax,
   type Employee, type InsertEmployee,
   type SalesOrder, type InsertSalesOrder,
+  type SalesOrderLine,
   type PurchaseOrder, type InsertPurchaseOrder,
+  type PurchaseOrderLine,
   type IntercompanyTransfer, type InsertIntercompanyTransfer,
   type JournalEntry, type InsertJournalEntry,
   type SharedAccess, type InsertSharedAccess,
@@ -1255,6 +1257,10 @@ export class MemStorage implements IStorage {
     return true;
   }
 
+  async getSalesOrderLines(salesOrderId: string): Promise<SalesOrderLine[]> {
+    return [];
+  }
+
   // ===================== PURCHASE ORDERS =====================
   async getPurchaseOrders(companyId: string): Promise<PurchaseOrder[]> {
     return Array.from(this.purchaseOrders.values()).filter(o => o.companyId === companyId);
@@ -1304,6 +1310,10 @@ export class MemStorage implements IStorage {
     if (!order) return false;
     this.purchaseOrders.delete(id);
     return true;
+  }
+
+  async getPurchaseOrderLines(purchaseOrderId: string): Promise<PurchaseOrderLine[]> {
+    return [];
   }
 
   // ===================== INTERCOMPANY TRANSFERS =====================

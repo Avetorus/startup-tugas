@@ -3,8 +3,8 @@ import { db } from "./db";
 import { 
   companies, users, companySettings, companyFiscalPeriods, roles, userCompanyRoles,
   chartOfAccounts, warehouses, products, customers, vendors, taxes, employees,
-  journalEntries, salesOrders, purchaseOrders, intercompanyTransfers, sharedAccess,
-  refreshTokens, authAuditLog,
+  journalEntries, salesOrders, salesOrderLines, purchaseOrders, purchaseOrderLines,
+  intercompanyTransfers, sharedAccess, refreshTokens, authAuditLog,
   stockLevels, stockMovements, deliveries, goodsReceipts, invoices, payments, arApLedger,
   type User, type InsertUser,
   type Company, type InsertCompany,
@@ -20,7 +20,9 @@ import {
   type Tax, type InsertTax,
   type Employee, type InsertEmployee,
   type SalesOrder, type InsertSalesOrder,
+  type SalesOrderLine,
   type PurchaseOrder, type InsertPurchaseOrder,
+  type PurchaseOrderLine,
   type IntercompanyTransfer, type InsertIntercompanyTransfer,
   type JournalEntry, type InsertJournalEntry,
   type SharedAccess, type InsertSharedAccess,
@@ -783,6 +785,12 @@ export class DatabaseStorage implements IStorage {
     return true;
   }
 
+  async getSalesOrderLines(salesOrderId: string): Promise<SalesOrderLine[]> {
+    return db.select().from(salesOrderLines)
+      .where(eq(salesOrderLines.salesOrderId, salesOrderId))
+      .orderBy(salesOrderLines.lineNumber);
+  }
+
   // ===================== PURCHASE ORDERS =====================
   async getPurchaseOrders(companyId: string): Promise<PurchaseOrder[]> {
     return db.select().from(purchaseOrders)
@@ -823,6 +831,12 @@ export class DatabaseStorage implements IStorage {
   async deletePurchaseOrder(id: string): Promise<boolean> {
     await db.delete(purchaseOrders).where(eq(purchaseOrders.id, id));
     return true;
+  }
+
+  async getPurchaseOrderLines(purchaseOrderId: string): Promise<PurchaseOrderLine[]> {
+    return db.select().from(purchaseOrderLines)
+      .where(eq(purchaseOrderLines.purchaseOrderId, purchaseOrderId))
+      .orderBy(purchaseOrderLines.lineNumber);
   }
 
   // ===================== INTERCOMPANY TRANSFERS =====================

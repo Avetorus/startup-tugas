@@ -1325,6 +1325,22 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/companies/:companyId/sales-orders/:orderId/lines", async (req: CompanyRequest, res) => {
+    try {
+      const order = await storage.getSalesOrder(req.params.orderId);
+      if (!order) {
+        return res.status(404).json({ error: "Sales order not found" });
+      }
+      if (order.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Order belongs to different company" });
+      }
+      const lines = await storage.getSalesOrderLines(req.params.orderId);
+      res.json(lines);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch sales order lines" });
+    }
+  });
+
   // Purchase Orders
   app.get("/api/companies/:companyId/purchase-orders", async (req: CompanyRequest, res) => {
     try {
@@ -1382,6 +1398,22 @@ export async function registerRoutes(
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete purchase order" });
+    }
+  });
+
+  app.get("/api/companies/:companyId/purchase-orders/:orderId/lines", async (req: CompanyRequest, res) => {
+    try {
+      const order = await storage.getPurchaseOrder(req.params.orderId);
+      if (!order) {
+        return res.status(404).json({ error: "Purchase order not found" });
+      }
+      if (order.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Order belongs to different company" });
+      }
+      const lines = await storage.getPurchaseOrderLines(req.params.orderId);
+      res.json(lines);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch purchase order lines" });
     }
   });
 

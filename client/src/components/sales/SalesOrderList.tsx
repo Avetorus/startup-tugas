@@ -16,7 +16,7 @@ import { Plus, Download, Eye, Edit, Trash2 } from "lucide-react";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { SalesOrder, Customer, Product, InsertSalesOrder } from "@shared/schema";
+import type { SalesOrder, Customer, Product, InsertSalesOrder, SalesOrderLine } from "@shared/schema";
 
 interface SalesOrderDisplay extends SalesOrder {
   customerName: string;
@@ -360,9 +360,11 @@ export function SalesOrderList() {
               View and manage order {selectedOrder?.orderNumber}
             </DialogDescription>
           </DialogHeader>
-          {selectedOrder && (
+          {selectedOrder && activeCompany && (
             <SalesOrderDetailInline
               order={selectedOrder}
+              companyId={activeCompany.id}
+              products={products}
               onStatusChange={handleStatusChange}
               onClose={() => setIsDetailOpen(false)}
               isPending={isWorkflowPending}
@@ -612,6 +614,8 @@ import { FileText, Truck, CheckCircle } from "lucide-react";
 
 interface SalesOrderDetailInlineProps {
   order: SalesOrderDisplay;
+  companyId: string;
+  products: Product[];
   onStatusChange: (orderId: string, newStatus: string) => void;
   onClose: () => void;
   isPending: boolean;
@@ -624,7 +628,16 @@ const orderSteps = [
   { id: "invoiced", label: "Invoiced" },
 ];
 
-function SalesOrderDetailInline({ order, onStatusChange, onClose, isPending }: SalesOrderDetailInlineProps) {
+function SalesOrderDetailInline({ order, companyId, products, onStatusChange, onClose, isPending }: SalesOrderDetailInlineProps) {
+  const { data: orderLines = [], isLoading: linesLoading } = useQuery<SalesOrderLine[]>({
+    queryKey: ["/api/companies", companyId, "sales-orders", order.id, "lines"],
+    enabled: !!companyId && !!order.id,
+  });
+
+  const getProductName = (productId: string) => {
+    return products.find(p => p.id === productId)?.name || "Unknown Product";
+  };
+
   const getNextStatus = (currentStatus: string): string | null => {
     const statusOrder = ["draft", "confirmed", "delivered", "invoiced"];
     const currentIndex = statusOrder.indexOf(currentStatus);
@@ -674,9 +687,17 @@ function SalesOrderDetailInline({ order, onStatusChange, onClose, isPending }: S
     }
   };
 
-  const total = parseFloat(order.total || "0");
-  const subtotal = parseFloat(order.subtotal || "0") || total * 0.9;
-  const tax = parseFloat(order.taxAmount || "0") || total * 0.1;
+  const computedSubtotal = orderLines.reduce((sum, line) => {
+    const qty = line.quantity || 0;
+    const price = parseFloat(line.unitPrice || "0");
+    return sum + (qty * price);
+  }, 0);
+  const computedTotal = orderLines.reduce((sum, line) => sum + parseFloat(line.lineTotal || "0"), 0);
+  const computedTax = computedTotal - computedSubtotal;
+  
+  const subtotal = orderLines.length > 0 ? computedSubtotal : parseFloat(order.subtotal || "0");
+  const total = orderLines.length > 0 ? computedTotal : parseFloat(order.total || "0");
+  const tax = orderLines.length > 0 ? computedTax : parseFloat(order.taxAmount || "0");
 
   return (
     <div className="space-y-6">
@@ -738,6 +759,47 @@ function SalesOrderDetailInline({ order, onStatusChange, onClose, isPending }: S
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Order Lines</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {linesLoading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-full" />
+            </div>
+          ) : orderLines.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">No order lines found</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-2 font-medium">#</th>
+                    <th className="text-left py-2 font-medium">Product</th>
+                    <th className="text-right py-2 font-medium">Qty</th>
+                    <th className="text-right py-2 font-medium">Unit Price</th>
+                    <th className="text-right py-2 font-medium">Line Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orderLines.map((line) => (
+                    <tr key={line.id} className="border-b last:border-b-0" data-testid={`row-order-line-${line.id}`}>
+                      <td className="py-2">{line.lineNumber}</td>
+                      <td className="py-2">{getProductName(line.productId)}</td>
+                      <td className="text-right py-2">{line.quantity}</td>
+                      <td className="text-right py-2">IDR {parseFloat(line.unitPrice || "0").toLocaleString()}</td>
+                      <td className="text-right py-2">IDR {parseFloat(line.lineTotal || "0").toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="flex justify-end">
         <Button variant="outline" onClick={onClose} data-testid="button-close-detail">
