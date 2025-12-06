@@ -170,16 +170,27 @@ All endpoints include company context via `x-company-id` header.
 
 ## First-Time Setup Flow
 
-### Setup Wizard
-When the system starts with no companies, users are guided through:
-1. **Company Registration**: Create the holding company (name, code, currency, timezone, address)
-2. **Admin Account Creation**: Create the first Super Admin user
-3. **Login**: Redirect to login after setup complete
+### Setup Wizard (Dedicated Routes)
+When the system starts with no data, users are guided through a dedicated setup flow:
+
+1. **`/setup`** - Entry point that checks system status and routes appropriately
+2. **`/setup/company`** - Company registration (name, code, currency, timezone, address)
+3. **`/setup/admin-user`** - Super Admin account creation linked to the company
+4. **Completion** - Setup pages are permanently locked and user is redirected to login
+
+### Setup Locking
+Once the system is initialized (company + admin created):
+- All setup routes (`/setup`, `/setup/company`, `/setup/admin-user`) show a "Setup Complete" lock screen
+- Automatic redirect to `/login` after 3 seconds
+- This prevents accidental reconfiguration of the ERP foundation
 
 ### Setup Endpoints (Public)
-- `GET /api/setup/status` - Check if system needs setup
+- `GET /api/setup/status` - Check system status; returns `pendingCompany` when admin setup is needed
 - `POST /api/setup/company` - Create first company (only when no companies exist)
-- `POST /api/setup/admin` - Create first admin (only after company exists)
+- `POST /api/setup/admin` - Create first admin (only after company exists, no users)
+
+### Page Refresh Resilience
+The admin step fetches the pending company ID from the API (`setupStatus.pendingCompany`), not just sessionStorage, ensuring the setup flow survives page refreshes.
 
 ### Post-Login Onboarding
 Dashboard shows onboarding checklist with tasks:
@@ -191,6 +202,8 @@ Dashboard shows onboarding checklist with tasks:
 - Review Settings
 
 ## Recent Changes
+- 2025-12-06: Enhanced setup wizard with dedicated URL routes (/setup/company, /setup/admin-user)
+- 2025-12-06: Added setup page locking to prevent reconfiguration after initialization
 - 2025-12-06: Implemented first-time setup wizard (company registration + admin creation)
 - 2025-12-06: Added onboarding checklist to dashboard for post-setup tasks
 - 2025-12-06: Implemented JWT authentication with refresh token rotation
