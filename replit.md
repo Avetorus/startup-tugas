@@ -20,9 +20,17 @@ The system employs a full-stack architecture with React on the client-side and E
 - **Data Segregation**: Strict isolation of data per company through `company_id` filtering on all entities.
 - **Role-Based Access Control**: Granular permissions based on user-company-role assignments.
 - **Authentication**: JWT-based authentication with access and refresh tokens, implementing hierarchy-based access control.
-- **Interconnected ERP Workflows**: A workflow orchestration layer manages transaction lifecycles (e.g., Sales Order, Purchase Order), automatically generating journal entries for financial integrity.
+- **Interconnected ERP Workflows**: A workflow orchestration layer (`server/services/workflow-service.ts`) manages transaction lifecycles (e.g., Sales Order, Purchase Order), automatically generating journal entries for financial integrity.
+- **ACID Transaction Safety**: All workflow methods use `db.transaction()` wrappers to ensure atomicity. Partial failures automatically roll back all changes. Row-level locking (`FOR UPDATE`) prevents race conditions and duplicate document numbers.
 - **First-Time Setup Flow**: A guided setup wizard for initial company registration and super admin creation, which locks after completion to prevent reconfiguration.
 - **API Design**: Consistent company-scoped API endpoints for all master data and transactional modules, ensuring data integrity and security.
+
+### Workflow Service Architecture
+The WorkflowService (`server/services/workflow-service.ts`) implements fully transactional ERP workflows:
+- **Sales Order Flow**: confirmSalesOrder → deliverSalesOrder → createCustomerInvoice → receiveCustomerPayment
+- **Purchase Order Flow**: confirmPurchaseOrder → receiveGoodsFromPurchaseOrder → createVendorInvoice → makeVendorPayment
+- **Transaction Helpers (Tx versions)**: getSalesOrderLinesTx, getPurchaseOrderLinesTx, getOrCreateStockLevelTx, getAccountByCodeTx, createCOGSJournalEntryTx, createARInvoiceJournalEntryTx, createARLedgerEntryTx, createPaymentReceiptJournalEntryTx, createARPaymentLedgerEntryTx, createGoodsReceiptJournalEntryTx, createAPInvoiceJournalEntryTx, createAPLedgerEntryTx, createVendorPaymentJournalEntryTx, createAPPaymentLedgerEntryTx
+- **Document Numbering**: Uses `getNextDocumentNumberTx()` with SELECT...FOR UPDATE to prevent duplicate codes under concurrency
 
 ### Feature Specifications
 - **Modules**: Sales (Orders, Customers, Deliveries, Invoices), Warehouse (Products, Locations, Stock, POs), Financials (Journal Entries, COA, AR/AP), HR (Employees, Attendance, Payroll), System (Companies, Users, Roles, Portals, Settings).

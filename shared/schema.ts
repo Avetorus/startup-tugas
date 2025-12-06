@@ -404,6 +404,22 @@ export const salesOrders = pgTable("sales_orders", {
   customerIdx: index("sales_orders_customer_idx").on(table.customerId),
 }));
 
+export const salesOrderLines = pgTable("sales_order_lines", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  salesOrderId: varchar("sales_order_id").notNull().references(() => salesOrders.id),
+  lineNumber: integer("line_number").notNull(),
+  productId: varchar("product_id").notNull().references(() => products.id),
+  description: text("description"),
+  quantity: decimal("quantity", { precision: 18, scale: 4 }).notNull(),
+  unitPrice: decimal("unit_price", { precision: 18, scale: 4 }).notNull(),
+  discountPercent: decimal("discount_percent", { precision: 5, scale: 2 }).default("0"),
+  taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("0"),
+  lineTotal: decimal("line_total", { precision: 18, scale: 2 }).default("0"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  orderIdx: index("sales_order_lines_order_idx").on(table.salesOrderId),
+}));
+
 // Purchase Orders
 export const purchaseOrders = pgTable("purchase_orders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -429,6 +445,21 @@ export const purchaseOrders = pgTable("purchase_orders", {
   companyOrderUnique: unique().on(table.companyId, table.orderNumber),
   companyIdx: index("purchase_orders_company_idx").on(table.companyId),
   vendorIdx: index("purchase_orders_vendor_idx").on(table.vendorId),
+}));
+
+export const purchaseOrderLines = pgTable("purchase_order_lines", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  purchaseOrderId: varchar("purchase_order_id").notNull().references(() => purchaseOrders.id),
+  lineNumber: integer("line_number").notNull(),
+  productId: varchar("product_id").notNull().references(() => products.id),
+  description: text("description"),
+  quantity: decimal("quantity", { precision: 18, scale: 4 }).notNull(),
+  unitPrice: decimal("unit_price", { precision: 18, scale: 4 }).notNull(),
+  taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("0"),
+  lineTotal: decimal("line_total", { precision: 18, scale: 2 }).default("0"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  orderIdx: index("purchase_order_lines_order_idx").on(table.purchaseOrderId),
 }));
 
 // ============================================================================
