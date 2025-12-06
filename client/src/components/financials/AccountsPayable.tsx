@@ -19,6 +19,7 @@ import { Download, DollarSign, Clock, AlertTriangle, Send, Loader2 } from "lucid
 import { useCompany } from "@/contexts/CompanyContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { exportToCSV } from "@/lib/export";
 import type { Invoice, Vendor } from "@shared/schema";
 
 interface VendorInvoiceDisplay extends Invoice {
@@ -190,6 +191,37 @@ export function AccountsPayable() {
     },
   ];
 
+  const handleExport = () => {
+    if (vendorInvoices.length === 0) {
+      toast({ title: "No data to export", variant: "destructive" });
+      return;
+    }
+    exportToCSV(
+      vendorInvoices.map(inv => ({
+        invoiceNumber: inv.invoiceNumber,
+        vendor: inv.vendorName,
+        invoiceDate: new Date(inv.invoiceDate).toLocaleDateString("id-ID"),
+        dueDate: inv.dueDate ? new Date(inv.dueDate).toLocaleDateString("id-ID") : "",
+        total: inv.total,
+        paid: inv.amountPaid,
+        due: inv.amountDue,
+        status: inv.status
+      })),
+      [
+        { key: "invoiceNumber", label: "Invoice Number" },
+        { key: "vendor", label: "Vendor" },
+        { key: "invoiceDate", label: "Invoice Date" },
+        { key: "dueDate", label: "Due Date" },
+        { key: "total", label: "Total (IDR)" },
+        { key: "paid", label: "Amount Paid (IDR)" },
+        { key: "due", label: "Amount Due (IDR)" },
+        { key: "status", label: "Status" }
+      ],
+      "accounts_payable"
+    );
+    toast({ title: "Accounts Payable exported successfully" });
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -204,7 +236,7 @@ export function AccountsPayable() {
         title="Accounts Payable"
         description="Track vendor invoices and payments"
         actions={
-          <Button variant="outline" data-testid="button-export">
+          <Button variant="outline" onClick={handleExport} data-testid="button-export">
             <Download className="h-4 w-4 mr-2" />
             Export
           </Button>

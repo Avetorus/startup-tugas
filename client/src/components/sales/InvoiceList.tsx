@@ -18,6 +18,7 @@ import { Download, Eye, DollarSign, Printer, Loader2 } from "lucide-react";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { exportToCSV } from "@/lib/export";
 import type { Invoice, Customer } from "@shared/schema";
 
 interface InvoiceDisplay extends Invoice {
@@ -195,6 +196,39 @@ export function InvoiceList() {
     },
   ];
 
+  const handleExport = () => {
+    if (invoicesWithCustomers.length === 0) {
+      toast({ title: "No data to export", variant: "destructive" });
+      return;
+    }
+    exportToCSV(
+      invoicesWithCustomers.map(inv => ({
+        invoiceNumber: inv.invoiceNumber,
+        customer: inv.customerName,
+        invoiceDate: new Date(inv.invoiceDate).toLocaleDateString("id-ID"),
+        dueDate: inv.dueDate ? new Date(inv.dueDate).toLocaleDateString("id-ID") : "",
+        subtotal: inv.subtotal,
+        tax: inv.taxAmount,
+        total: inv.total,
+        paid: inv.amountPaid,
+        status: inv.status
+      })),
+      [
+        { key: "invoiceNumber", label: "Invoice Number" },
+        { key: "customer", label: "Customer" },
+        { key: "invoiceDate", label: "Invoice Date" },
+        { key: "dueDate", label: "Due Date" },
+        { key: "subtotal", label: "Subtotal (IDR)" },
+        { key: "tax", label: "Tax (IDR)" },
+        { key: "total", label: "Total (IDR)" },
+        { key: "paid", label: "Amount Paid (IDR)" },
+        { key: "status", label: "Status" }
+      ],
+      "invoices"
+    );
+    toast({ title: "Invoices exported successfully" });
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -209,7 +243,7 @@ export function InvoiceList() {
         title="Sales Invoices"
         description="Manage customer invoices and payments"
         actions={
-          <Button variant="outline" data-testid="button-export">
+          <Button variant="outline" onClick={handleExport} data-testid="button-export">
             <Download className="h-4 w-4 mr-2" />
             Export
           </Button>

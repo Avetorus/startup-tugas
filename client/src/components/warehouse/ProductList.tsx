@@ -25,6 +25,7 @@ import { Plus, Download, Eye, Edit, Trash2, Package, Loader2 } from "lucide-reac
 import { useAuth } from "@/contexts/AuthContext";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { exportToCSV } from "@/lib/export";
 import type { Product } from "@shared/schema";
 
 export function ProductList() {
@@ -203,6 +204,39 @@ export function ProductList() {
     },
   ];
 
+  const handleExport = () => {
+    if (products.length === 0) {
+      toast({ title: "No data to export", variant: "destructive" });
+      return;
+    }
+    exportToCSV(
+      products.map(p => ({
+        sku: p.sku,
+        name: p.name,
+        category: p.category || "",
+        uom: p.uom,
+        price: p.price,
+        cost: p.cost,
+        minStock: p.minStockLevel,
+        reorderPoint: p.reorderPoint,
+        status: p.isActive ? "Active" : "Inactive"
+      })),
+      [
+        { key: "sku", label: "SKU" },
+        { key: "name", label: "Name" },
+        { key: "category", label: "Category" },
+        { key: "uom", label: "UOM" },
+        { key: "price", label: "Price (IDR)" },
+        { key: "cost", label: "Cost (IDR)" },
+        { key: "minStock", label: "Min Stock" },
+        { key: "reorderPoint", label: "Reorder Point" },
+        { key: "status", label: "Status" }
+      ],
+      "products"
+    );
+    toast({ title: "Products exported successfully" });
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -218,7 +252,7 @@ export function ProductList() {
         description={`${products.length} product${products.length !== 1 ? "s" : ""}`}
         actions={
           <>
-            <Button variant="outline" data-testid="button-export">
+            <Button variant="outline" onClick={handleExport} data-testid="button-export">
               <Download className="h-4 w-4 mr-2" />
               Export
             </Button>

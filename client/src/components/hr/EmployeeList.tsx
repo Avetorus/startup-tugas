@@ -27,6 +27,7 @@ import { Plus, Download, Eye, Edit, Trash2 } from "lucide-react";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { exportToCSV } from "@/lib/export";
 import type { Employee, InsertEmployee } from "@shared/schema";
 
 export function EmployeeList() {
@@ -143,28 +144,7 @@ export function EmployeeList() {
     deleteMutation.mutate(employeeId);
   };
 
-  const handleExport = () => {
-    const csv = [
-      ["Employee Code", "Name", "Email", "Department", "Position", "Status", "Hire Date"].join(","),
-      ...employees.map(e => [
-        e.employeeCode,
-        e.name,
-        e.email || "",
-        e.department || "",
-        e.position || "",
-        e.status || "",
-        e.hireDate ? new Date(e.hireDate).toLocaleDateString() : ""
-      ].join(","))
-    ].join("\n");
-    
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "employees.csv";
-    a.click();
-  };
-
+  
   const getInitials = (name: string) => {
     return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
   };
@@ -226,6 +206,37 @@ export function EmployeeList() {
       ),
     },
   ];
+
+  const handleExport = () => {
+    if (employees.length === 0) {
+      toast({ title: "No data to export", variant: "destructive" });
+      return;
+    }
+    exportToCSV(
+      employees.map(e => ({
+        code: e.employeeCode,
+        name: e.name,
+        email: e.email || "",
+        department: e.department || "",
+        position: e.position || "",
+        hireDate: e.hireDate ? new Date(e.hireDate).toLocaleDateString("id-ID") : "",
+        salary: e.salary,
+        status: e.status
+      })),
+      [
+        { key: "code", label: "Employee Code" },
+        { key: "name", label: "Name" },
+        { key: "email", label: "Email" },
+        { key: "department", label: "Department" },
+        { key: "position", label: "Position" },
+        { key: "hireDate", label: "Hire Date" },
+        { key: "salary", label: "Base Salary (IDR)" },
+        { key: "status", label: "Status" }
+      ],
+      "employees"
+    );
+    toast({ title: "Employees exported successfully" });
+  };
 
   if (isLoading) {
     return (

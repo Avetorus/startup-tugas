@@ -25,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { exportToCSV } from "@/lib/export";
 import type { Vendor } from "@shared/schema";
 
 export function VendorList() {
@@ -201,6 +202,39 @@ export function VendorList() {
     },
   ];
 
+  const handleExport = () => {
+    if (vendors.length === 0) {
+      toast({ title: "No data to export", variant: "destructive" });
+      return;
+    }
+    exportToCSV(
+      vendors.map(v => ({
+        code: v.code,
+        name: v.name,
+        email: v.email || "",
+        phone: v.phone || "",
+        city: v.city || "",
+        country: v.country || "",
+        type: v.vendorType,
+        paymentTerms: v.paymentTerms,
+        status: v.isActive ? "Active" : "Inactive"
+      })),
+      [
+        { key: "code", label: "Code" },
+        { key: "name", label: "Name" },
+        { key: "email", label: "Email" },
+        { key: "phone", label: "Phone" },
+        { key: "city", label: "City" },
+        { key: "country", label: "Country" },
+        { key: "type", label: "Type" },
+        { key: "paymentTerms", label: "Payment Terms" },
+        { key: "status", label: "Status" }
+      ],
+      "vendors"
+    );
+    toast({ title: "Vendors exported successfully" });
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -216,7 +250,7 @@ export function VendorList() {
         description={`${vendors.length} vendor${vendors.length !== 1 ? "s" : ""}`}
         actions={
           <>
-            <Button variant="outline" data-testid="button-export">
+            <Button variant="outline" onClick={handleExport} data-testid="button-export">
               <Download className="h-4 w-4 mr-2" />
               Export
             </Button>

@@ -24,6 +24,7 @@ import { Plus, Download, Edit, Trash2, Warehouse, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { exportToCSV } from "@/lib/export";
 import type { Warehouse as WarehouseType } from "@shared/schema";
 
 export function WarehouseList() {
@@ -177,6 +178,35 @@ export function WarehouseList() {
     },
   ];
 
+  const handleExport = () => {
+    if (warehouses.length === 0) {
+      toast({ title: "No data to export", variant: "destructive" });
+      return;
+    }
+    exportToCSV(
+      warehouses.map(w => ({
+        code: w.code,
+        name: w.name,
+        type: w.warehouseType,
+        city: w.city || "",
+        state: w.state || "",
+        country: w.country || "",
+        status: w.isActive ? "Active" : "Inactive"
+      })),
+      [
+        { key: "code", label: "Code" },
+        { key: "name", label: "Name" },
+        { key: "type", label: "Type" },
+        { key: "city", label: "City" },
+        { key: "state", label: "State" },
+        { key: "country", label: "Country" },
+        { key: "status", label: "Status" }
+      ],
+      "warehouses"
+    );
+    toast({ title: "Warehouses exported successfully" });
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -192,7 +222,7 @@ export function WarehouseList() {
         description={`${warehouses.length} warehouse${warehouses.length !== 1 ? "s" : ""}`}
         actions={
           <>
-            <Button variant="outline" data-testid="button-export">
+            <Button variant="outline" onClick={handleExport} data-testid="button-export">
               <Download className="h-4 w-4 mr-2" />
               Export
             </Button>

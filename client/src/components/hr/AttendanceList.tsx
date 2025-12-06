@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Download, Clock, Users, UserCheck, UserX } from "lucide-react";
 import { mockAttendance } from "@/lib/mockData";
+import { exportToCSV } from "@/lib/export";
 
 type Attendance = typeof mockAttendance[0];
 
@@ -99,13 +100,36 @@ export function AttendanceList() {
     },
   ];
 
+  const handleExport = () => {
+    if (attendance.length === 0) return;
+    exportToCSV(
+      attendance.map(a => ({
+        employee: a.employeeName,
+        date: a.date,
+        checkIn: a.checkIn || "",
+        checkOut: a.checkOut || "",
+        hours: a.hours,
+        status: a.status
+      })),
+      [
+        { key: "employee", label: "Employee" },
+        { key: "date", label: "Date" },
+        { key: "checkIn", label: "Check In" },
+        { key: "checkOut", label: "Check Out" },
+        { key: "hours", label: "Hours" },
+        { key: "status", label: "Status" }
+      ],
+      "attendance"
+    );
+  };
+
   return (
     <div>
       <PageHeader
         title="Attendance"
         description="Track daily attendance"
         actions={
-          <Button variant="outline" data-testid="button-export">
+          <Button variant="outline" onClick={handleExport} data-testid="button-export">
             <Download className="h-4 w-4 mr-2" />
             Export
           </Button>

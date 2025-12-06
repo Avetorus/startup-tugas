@@ -25,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { exportToCSV } from "@/lib/export";
 import type { Customer } from "@shared/schema";
 
 export function CustomerList() {
@@ -204,6 +205,41 @@ export function CustomerList() {
     },
   ];
 
+  const handleExport = () => {
+    if (customers.length === 0) {
+      toast({ title: "No data to export", variant: "destructive" });
+      return;
+    }
+    exportToCSV(
+      customers.map(c => ({
+        code: c.code,
+        name: c.name,
+        email: c.email || "",
+        phone: c.phone || "",
+        city: c.city || "",
+        country: c.country || "",
+        type: c.customerType,
+        paymentTerms: c.paymentTerms,
+        creditLimit: c.creditLimit,
+        status: c.isActive ? "Active" : "Inactive"
+      })),
+      [
+        { key: "code", label: "Code" },
+        { key: "name", label: "Name" },
+        { key: "email", label: "Email" },
+        { key: "phone", label: "Phone" },
+        { key: "city", label: "City" },
+        { key: "country", label: "Country" },
+        { key: "type", label: "Type" },
+        { key: "paymentTerms", label: "Payment Terms" },
+        { key: "creditLimit", label: "Credit Limit (IDR)" },
+        { key: "status", label: "Status" }
+      ],
+      "customers"
+    );
+    toast({ title: "Customers exported successfully" });
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -219,7 +255,7 @@ export function CustomerList() {
         description={`${customers.length} customer${customers.length !== 1 ? "s" : ""}`}
         actions={
           <>
-            <Button variant="outline" data-testid="button-export">
+            <Button variant="outline" onClick={handleExport} data-testid="button-export">
               <Download className="h-4 w-4 mr-2" />
               Export
             </Button>
