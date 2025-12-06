@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,12 +21,6 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
   Plus,
   Download,
   Edit,
@@ -34,9 +29,13 @@ import {
   ChevronDown,
   FileText,
   Layers,
+  Loader2,
 } from "lucide-react";
-import { mockAccounts, type ChartOfAccountsEntry } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import type { Account } from "@shared/schema";
 
 const accountTypeColors: Record<string, string> = {
   asset: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
@@ -47,20 +46,77 @@ const accountTypeColors: Record<string, string> = {
 };
 
 export function ChartOfAccounts() {
-  const [accounts, setAccounts] = useState<ChartOfAccountsEntry[]>(mockAccounts);
+  const { activeCompany, getAuthHeaders } = useAuth();
+  const { toast } = useToast();
+  const companyId = activeCompany?.id;
+
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingAccount, setEditingAccount] = useState<ChartOfAccountsEntry | null>(null);
-  const [expandedAccounts, setExpandedAccounts] = useState<Set<string>>(new Set(["1000", "2000", "3000", "4000", "5000"]));
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
+  const [expandedAccounts, setExpandedAccounts] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
 
   const [formData, setFormData] = useState({
-    id: "",
+    accountCode: "",
     name: "",
-    type: "asset" as "asset" | "liability" | "equity" | "revenue" | "expense",
+    accountType: "asset" as "asset" | "liability" | "equity" | "revenue" | "expense",
     level: 3 as 1 | 2 | 3,
-    parentId: "",
+    parentId: "__none__",
     isPostable: true,
+  });
+
+  const { data: accounts = [], isLoading } = useQuery<Account[]>({
+    queryKey: ["/api/companies", companyId, "accounts"],
+    enabled: !!companyId,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: Omit<typeof formData, "parentId"> & { parentId: string | null }) => {
+      const response = await apiRequest("POST", `/api/companies/${companyId}/accounts`, data, {
+        headers: getAuthHeaders(),
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "accounts"] });
+      toast({ title: "Account created successfully" });
+      setIsFormOpen(false);
+    },
+    onError: () => {
+      toast({ title: "Failed to create account", variant: "destructive" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<Account> }) => {
+      const response = await apiRequest("PATCH", `/api/companies/${companyId}/accounts/${id}`, data, {
+        headers: getAuthHeaders(),
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "accounts"] });
+      toast({ title: "Account updated successfully" });
+      setIsFormOpen(false);
+    },
+    onError: () => {
+      toast({ title: "Failed to update account", variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/companies/${companyId}/accounts/${id}`, undefined, {
+        headers: getAuthHeaders(),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "accounts"] });
+      toast({ title: "Account deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Cannot delete account with child accounts", variant: "destructive" });
+    },
   });
 
   const toggleExpand = (accountId: string) => {
@@ -84,60 +140,54 @@ export function ChartOfAccounts() {
     setExpandedAccounts(new Set());
   };
 
-  const handleOpenForm = (account?: ChartOfAccountsEntry) => {
+  const handleOpenForm = (account?: Account) => {
     if (account) {
       setEditingAccount(account);
       setFormData({
-        id: account.id,
+        accountCode: account.accountCode,
         name: account.name,
-        type: account.type,
-        level: account.level,
-        parentId: account.parentId || "",
-        isPostable: account.isPostable,
+        accountType: account.accountType as typeof formData.accountType,
+        level: account.level as 1 | 2 | 3,
+        parentId: account.parentId || "__none__",
+        isPostable: account.isPostable ?? true,
       });
     } else {
       setEditingAccount(null);
-      setFormData({ id: "", name: "", type: "asset", level: 3, parentId: "", isPostable: true });
+      setFormData({ accountCode: "", name: "", accountType: "asset", level: 3, parentId: "__none__", isPostable: true });
     }
     setIsFormOpen(true);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const submitData = {
+      ...formData,
+      parentId: formData.parentId === "__none__" ? null : formData.parentId,
+    };
+    
     if (editingAccount) {
-      setAccounts(accounts.map(a =>
-        a.id === editingAccount.id ? { ...a, ...formData, parentId: formData.parentId || null } : a
-      ));
-      console.log("Updated account:", editingAccount.id);
+      updateMutation.mutate({ id: editingAccount.id, data: submitData });
     } else {
-      const newAccount: ChartOfAccountsEntry = {
-        ...formData,
-        parentId: formData.parentId || null,
-        balance: 0,
-      };
-      setAccounts([...accounts, newAccount].sort((a, b) => a.id.localeCompare(b.id)));
-      console.log("Created account:", newAccount);
+      createMutation.mutate(submitData);
     }
-    setIsFormOpen(false);
   };
 
   const handleDeleteAccount = (accountId: string) => {
     const hasChildren = accounts.some(a => a.parentId === accountId);
     if (hasChildren) {
-      alert("Cannot delete account with child accounts");
+      toast({ title: "Cannot delete account with child accounts", variant: "destructive" });
       return;
     }
-    setAccounts(accounts.filter(a => a.id !== accountId));
-    console.log("Deleted account:", accountId);
+    deleteMutation.mutate(accountId);
   };
 
-  const getChildAccounts = (parentId: string | null): ChartOfAccountsEntry[] => {
+  const getChildAccounts = (parentId: string | null): Account[] => {
     return accounts.filter(a => a.parentId === parentId);
   };
 
-  const calculateBalance = (account: ChartOfAccountsEntry): number => {
+  const calculateBalance = (account: Account): number => {
     if (account.isPostable) {
-      return account.balance;
+      return parseFloat(account.balance || "0");
     }
     const children = accounts.filter(a => a.parentId === account.id);
     return children.reduce((sum, child) => sum + calculateBalance(child), 0);
@@ -148,11 +198,11 @@ export function ChartOfAccounts() {
     if (searchTerm) {
       filtered = filtered.filter(a =>
         a.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        a.id.includes(searchTerm)
+        a.accountCode.includes(searchTerm)
       );
     }
     if (filterType !== "all") {
-      filtered = filtered.filter(a => a.type === filterType);
+      filtered = filtered.filter(a => a.accountType === filterType);
     }
     return filtered;
   }, [accounts, searchTerm, filterType]);
@@ -169,27 +219,27 @@ export function ChartOfAccounts() {
   }, [accounts]);
 
   const totalAssets = useMemo(() =>
-    accounts.filter(a => a.type === "asset" && a.isPostable).reduce((sum, a) => sum + a.balance, 0),
+    accounts.filter(a => a.accountType === "asset" && a.isPostable).reduce((sum, a) => sum + parseFloat(a.balance || "0"), 0),
     [accounts]
   );
   const totalLiabilities = useMemo(() =>
-    accounts.filter(a => a.type === "liability" && a.isPostable).reduce((sum, a) => sum + a.balance, 0),
+    accounts.filter(a => a.accountType === "liability" && a.isPostable).reduce((sum, a) => sum + parseFloat(a.balance || "0"), 0),
     [accounts]
   );
   const totalEquity = useMemo(() =>
-    accounts.filter(a => a.type === "equity" && a.isPostable).reduce((sum, a) => sum + a.balance, 0),
+    accounts.filter(a => a.accountType === "equity" && a.isPostable).reduce((sum, a) => sum + parseFloat(a.balance || "0"), 0),
     [accounts]
   );
   const totalRevenue = useMemo(() =>
-    accounts.filter(a => a.type === "revenue" && a.isPostable).reduce((sum, a) => sum + a.balance, 0),
+    accounts.filter(a => a.accountType === "revenue" && a.isPostable).reduce((sum, a) => sum + parseFloat(a.balance || "0"), 0),
     [accounts]
   );
   const totalExpenses = useMemo(() =>
-    accounts.filter(a => a.type === "expense" && a.isPostable).reduce((sum, a) => sum + a.balance, 0),
+    accounts.filter(a => a.accountType === "expense" && a.isPostable).reduce((sum, a) => sum + parseFloat(a.balance || "0"), 0),
     [accounts]
   );
 
-  const renderAccountRow = (account: ChartOfAccountsEntry, depth: number = 0) => {
+  const renderAccountRow = (account: Account, depth: number = 0) => {
     const children = getChildAccounts(account.id);
     const hasChildren = children.length > 0;
     const isExpanded = expandedAccounts.has(account.id);
@@ -220,7 +270,7 @@ export function ChartOfAccounts() {
           </div>
 
           <div className="flex-1 min-w-0 flex items-center gap-3">
-            <span className="font-mono text-sm w-14 shrink-0">{account.id}</span>
+            <span className="font-mono text-sm w-14 shrink-0">{account.accountCode}</span>
             <span className="truncate">{account.name}</span>
             {account.isPostable && (
               <Badge variant="outline" className="text-xs shrink-0">Postable</Badge>
@@ -228,8 +278,8 @@ export function ChartOfAccounts() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Badge className={cn("text-xs capitalize", accountTypeColors[account.type])}>
-              {account.type}
+            <Badge className={cn("text-xs capitalize", accountTypeColors[account.accountType])}>
+              {account.accountType}
             </Badge>
             <span className="text-xs text-muted-foreground w-8 text-center">L{account.level}</span>
             <span className={cn(
@@ -246,7 +296,7 @@ export function ChartOfAccounts() {
                 variant="ghost"
                 size="icon"
                 onClick={() => handleDeleteAccount(account.id)}
-                disabled={hasChildren}
+                disabled={hasChildren || deleteMutation.isPending}
                 data-testid={`button-delete-${account.id}`}
               >
                 <Trash2 className="h-4 w-4" />
@@ -267,9 +317,9 @@ export function ChartOfAccounts() {
   const handleExportCSV = () => {
     const headers = ["Account Code", "Account Name", "Type", "Level", "Parent Account", "Balance", "Postable"];
     const rows = accounts.map(a => [
-      a.id,
+      a.accountCode,
       a.name,
-      a.type.charAt(0).toUpperCase() + a.type.slice(1),
+      a.accountType.charAt(0).toUpperCase() + a.accountType.slice(1),
       a.level,
       a.parentId || "",
       calculateBalance(a),
@@ -279,18 +329,17 @@ export function ChartOfAccounts() {
     const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "chart_of_accounts.csv";
-    a.click();
-    console.log("Exported Chart of Accounts to CSV");
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "chart_of_accounts.csv";
+    link.click();
   };
 
   const handleExportJSON = () => {
     const jsonData = accounts.map(a => ({
-      accountCode: a.id,
+      accountCode: a.accountCode,
       accountName: a.name,
-      accountType: a.type.charAt(0).toUpperCase() + a.type.slice(1),
+      accountType: a.accountType.charAt(0).toUpperCase() + a.accountType.slice(1),
       level: a.level,
       parentAccountCode: a.parentId,
       balance: calculateBalance(a),
@@ -299,12 +348,27 @@ export function ChartOfAccounts() {
 
     const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "chart_of_accounts.json";
-    a.click();
-    console.log("Exported Chart of Accounts to JSON");
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "chart_of_accounts.json";
+    link.click();
   };
+
+  if (!companyId) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-muted-foreground">Please select a company to view Chart of Accounts</p>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -429,7 +493,13 @@ export function ChartOfAccounts() {
               <div className="col-span-1"></div>
             </div>
             <div className="max-h-[600px] overflow-y-auto">
-              {rootAccounts.map(account => renderAccountRow(account, 0))}
+              {rootAccounts.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground">
+                  No accounts found. Click "New Account" to create one.
+                </div>
+              ) : (
+                rootAccounts.map(account => renderAccountRow(account, 0))
+              )}
             </div>
           </div>
         </CardContent>
@@ -443,22 +513,22 @@ export function ChartOfAccounts() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="id">Account Number *</Label>
+                <Label htmlFor="accountCode">Account Number *</Label>
                 <Input
-                  id="id"
-                  value={formData.id}
-                  onChange={(e) => setFormData({ ...formData, id: e.target.value })}
+                  id="accountCode"
+                  value={formData.accountCode}
+                  onChange={(e) => setFormData({ ...formData, accountCode: e.target.value })}
                   disabled={!!editingAccount}
                   placeholder="e.g., 1111"
                   required
-                  data-testid="input-id"
+                  data-testid="input-account-code"
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="type">Account Type *</Label>
                 <Select
-                  value={formData.type}
-                  onValueChange={(value) => setFormData({ ...formData, type: value as typeof formData.type })}
+                  value={formData.accountType}
+                  onValueChange={(value) => setFormData({ ...formData, accountType: value as typeof formData.accountType })}
                 >
                   <SelectTrigger data-testid="select-type">
                     <SelectValue />
@@ -511,10 +581,10 @@ export function ChartOfAccounts() {
                     <SelectValue placeholder="Select parent" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None (Root Account)</SelectItem>
+                    <SelectItem value="__none__">None (Root Account)</SelectItem>
                     {parentAccountOptions.map((account) => (
                       <SelectItem key={account.id} value={account.id}>
-                        {account.id} - {account.name}
+                        {account.accountCode} - {account.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -536,7 +606,14 @@ export function ChartOfAccounts() {
               <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)} data-testid="button-cancel">
                 Cancel
               </Button>
-              <Button type="submit" data-testid="button-save">
+              <Button 
+                type="submit" 
+                disabled={createMutation.isPending || updateMutation.isPending}
+                data-testid="button-save"
+              >
+                {(createMutation.isPending || updateMutation.isPending) && (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                )}
                 {editingAccount ? "Update" : "Create"}
               </Button>
             </div>
