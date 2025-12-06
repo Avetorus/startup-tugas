@@ -81,3 +81,33 @@ All transactional flows enforce realistic dependencies:
 ### Currency
 - Default currency: Indonesian Rupiah (IDR)
 - Multi-currency support with exchange rate management per company
+
+## Frontend Workflow Integration
+
+### Sales Order Workflow (SalesOrderList.tsx)
+Frontend actions trigger complete backend workflows with ACID guarantees:
+- **Confirm Order**: POST `/sales-orders/:id/confirm` → reserves stock
+- **Deliver Order**: POST `/sales-orders/:id/deliver` → creates delivery, COGS journal entry
+- **Create Invoice**: POST `/sales-orders/:id/invoice` → creates AR invoice, revenue journal entry
+
+### Purchase Order Workflow (PurchaseOrderList.tsx)
+- **Confirm PO**: POST `/purchase-orders/:id/confirm` → confirms purchase order
+- **Receive Goods**: POST `/purchase-orders/:id/receive` → creates goods receipt, inventory journal entry
+- **Create Bill**: POST `/purchase-orders/:id/bill` → creates AP invoice
+
+### Payment Workflows
+- **Receive Customer Payment** (InvoiceList.tsx): POST `/payments/receive` → updates AR, creates payment receipt
+- **Make Vendor Payment** (AccountsPayable.tsx): POST `/payments/pay` → updates AP, creates payment record
+
+### Invoice Types
+- **Customer invoices** (AR): `invoiceType === "customer"`
+- **Vendor invoices** (AP): `invoiceType === "vendor"`
+
+### Cache Invalidation
+After each workflow action, the frontend invalidates all affected caches:
+- Orders (sales-orders, purchase-orders)
+- Stock levels
+- Deliveries, goods receipts
+- Invoices, payments
+- Journal entries
+- AR/AP ledgers
