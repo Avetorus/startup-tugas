@@ -774,6 +774,41 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/companies/:companyId/accounts/:accountId", async (req: CompanyRequest, res) => {
+    try {
+      const account = await storage.getAccount(req.params.accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      if (account.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Account does not belong to this company" });
+      }
+      const updated = await storage.updateAccount(req.params.accountId, req.body);
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update account" });
+    }
+  });
+
+  app.delete("/api/companies/:companyId/accounts/:accountId", async (req: CompanyRequest, res) => {
+    try {
+      const account = await storage.getAccount(req.params.accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      if (account.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Account does not belong to this company" });
+      }
+      const deleted = await storage.deleteAccount(req.params.accountId);
+      if (!deleted) {
+        return res.status(400).json({ error: "Cannot delete account with child accounts" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete account" });
+    }
+  });
+
   // Warehouses
   app.get("/api/companies/:companyId/warehouses", async (req: CompanyRequest, res) => {
     try {

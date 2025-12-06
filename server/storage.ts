@@ -77,6 +77,7 @@ export interface IStorage {
   getAccountByCode(companyId: string, accountCode: string): Promise<Account | undefined>;
   createAccount(account: InsertAccount): Promise<Account>;
   updateAccount(id: string, updates: Partial<Account>): Promise<Account | undefined>;
+  deleteAccount(id: string): Promise<boolean>;
   
   // Warehouses (company-scoped)
   getWarehouses(companyId: string): Promise<Warehouse[]>;
@@ -1194,6 +1195,18 @@ export class MemStorage implements IStorage {
     const updated = { ...account, ...updates };
     this.accounts.set(id, updated);
     return updated;
+  }
+
+  async deleteAccount(id: string): Promise<boolean> {
+    const account = this.accounts.get(id);
+    if (!account) return false;
+    
+    // Check if account has children
+    const hasChildren = Array.from(this.accounts.values()).some(a => a.parentId === id);
+    if (hasChildren) return false;
+    
+    this.accounts.delete(id);
+    return true;
   }
 
   // ===================== WAREHOUSES =====================
