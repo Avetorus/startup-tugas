@@ -37,6 +37,51 @@ import { randomUUID } from "crypto";
 
 export class DatabaseStorage implements IStorage {
   
+  private initialized = false;
+  
+  private async ensureSystemRoles(): Promise<void> {
+    if (this.initialized) return;
+    
+    const systemRolesData = [
+      {
+        id: "role-admin",
+        code: "ADMIN",
+        name: "Administrator",
+        description: "Full system access",
+        isSystemRole: true,
+        permissions: ["*"],
+        createdAt: new Date(),
+      },
+      {
+        id: "role-manager",
+        code: "MANAGER",
+        name: "Manager",
+        description: "Department manager access",
+        isSystemRole: true,
+        permissions: ["read:*", "write:*", "delete:own"],
+        createdAt: new Date(),
+      },
+      {
+        id: "role-user",
+        code: "USER",
+        name: "User",
+        description: "Standard user access",
+        isSystemRole: true,
+        permissions: ["read:*", "write:own"],
+        createdAt: new Date(),
+      },
+    ];
+    
+    for (const roleData of systemRolesData) {
+      const existing = await db.select().from(roles).where(eq(roles.code, roleData.code)).limit(1);
+      if (existing.length === 0) {
+        await db.insert(roles).values(roleData);
+      }
+    }
+    
+    this.initialized = true;
+  }
+  
   // ===================== USERS =====================
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
@@ -253,6 +298,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getRoleByCode(code: string): Promise<Role | undefined> {
+    await this.ensureSystemRoles();
     const [role] = await db.select().from(roles).where(eq(roles.code, code));
     return role || undefined;
   }
@@ -897,12 +943,14 @@ export class DatabaseStorage implements IStorage {
 
   // ===================== SYSTEM =====================
   async isSystemInitialized(): Promise<boolean> {
+    await this.ensureSystemRoles();
     const companyList = await db.select().from(companies).limit(1);
     const userList = await db.select().from(users).limit(1);
     return companyList.length > 0 && userList.length > 0;
   }
 
   async getSystemStats(): Promise<{ companyCount: number; userCount: number }> {
+    await this.ensureSystemRoles();
     const [companyResult] = await db.select({ count: sql<number>`count(*)` }).from(companies);
     const [userResult] = await db.select({ count: sql<number>`count(*)` }).from(users);
     return {
