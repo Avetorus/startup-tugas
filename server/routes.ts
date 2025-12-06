@@ -11,6 +11,7 @@ import {
   insertVendorSchema,
   insertTaxSchema,
   insertEmployeeSchema,
+  insertJournalEntrySchema,
   insertFiscalPeriodSchema,
   insertSalesOrderSchema,
   insertPurchaseOrderSchema,
@@ -786,7 +787,9 @@ export async function registerRoutes(
       if (account.companyId !== req.params.companyId) {
         return res.status(403).json({ error: "Account does not belong to this company" });
       }
-      const updated = await storage.updateAccount(req.params.accountId, req.body);
+      // Sanitize: remove ownership fields from update payload to prevent cross-company tampering
+      const { companyId, id, ...sanitizedUpdates } = req.body;
+      const updated = await storage.updateAccount(req.params.accountId, sanitizedUpdates);
       res.json(updated);
     } catch (error) {
       res.status(500).json({ error: "Failed to update account" });
@@ -847,7 +850,9 @@ export async function registerRoutes(
       if (warehouse.companyId !== req.params.companyId) {
         return res.status(403).json({ error: "Warehouse does not belong to this company" });
       }
-      const updated = await storage.updateWarehouse(req.params.warehouseId, req.body);
+      // Sanitize: remove ownership fields from update payload to prevent cross-company tampering
+      const { companyId, id, ...sanitizedUpdates } = req.body;
+      const updated = await storage.updateWarehouse(req.params.warehouseId, sanitizedUpdates);
       res.json(updated);
     } catch (error) {
       res.status(500).json({ error: "Failed to update warehouse" });
@@ -905,7 +910,9 @@ export async function registerRoutes(
       if (product.companyId !== req.params.companyId) {
         return res.status(403).json({ error: "Product does not belong to this company" });
       }
-      const updated = await storage.updateProduct(req.params.productId, req.body);
+      // Sanitize: remove ownership fields from update payload to prevent cross-company tampering
+      const { companyId, id, ...sanitizedUpdates } = req.body;
+      const updated = await storage.updateProduct(req.params.productId, sanitizedUpdates);
       res.json(updated);
     } catch (error) {
       res.status(500).json({ error: "Failed to update product" });
@@ -963,7 +970,9 @@ export async function registerRoutes(
       if (customer.companyId !== req.params.companyId) {
         return res.status(403).json({ error: "Customer does not belong to this company" });
       }
-      const updated = await storage.updateCustomer(req.params.customerId, req.body);
+      // Sanitize: remove ownership fields from update payload to prevent cross-company tampering
+      const { companyId, id, ...sanitizedUpdates } = req.body;
+      const updated = await storage.updateCustomer(req.params.customerId, sanitizedUpdates);
       res.json(updated);
     } catch (error) {
       res.status(500).json({ error: "Failed to update customer" });
@@ -1021,7 +1030,9 @@ export async function registerRoutes(
       if (vendor.companyId !== req.params.companyId) {
         return res.status(403).json({ error: "Vendor does not belong to this company" });
       }
-      const updated = await storage.updateVendor(req.params.vendorId, req.body);
+      // Sanitize: remove ownership fields from update payload to prevent cross-company tampering
+      const { companyId, id, ...sanitizedUpdates } = req.body;
+      const updated = await storage.updateVendor(req.params.vendorId, sanitizedUpdates);
       res.json(updated);
     } catch (error) {
       res.status(500).json({ error: "Failed to update vendor" });
@@ -1079,7 +1090,9 @@ export async function registerRoutes(
       if (tax.companyId !== req.params.companyId) {
         return res.status(403).json({ error: "Tax belongs to different company" });
       }
-      const updated = await storage.updateTax(req.params.taxId, req.body);
+      // Sanitize: remove ownership fields from update payload to prevent cross-company tampering
+      const { companyId, id, ...sanitizedUpdates } = req.body;
+      const updated = await storage.updateTax(req.params.taxId, sanitizedUpdates);
       res.json(updated);
     } catch (error) {
       res.status(500).json({ error: "Failed to update tax" });
@@ -1137,7 +1150,9 @@ export async function registerRoutes(
       if (employee.companyId !== req.params.companyId) {
         return res.status(403).json({ error: "Employee belongs to different company" });
       }
-      const updated = await storage.updateEmployee(req.params.employeeId, req.body);
+      // Sanitize: remove ownership fields from update payload to prevent cross-company tampering
+      const { companyId, id, employeeNumber, ...sanitizedUpdates } = req.body;
+      const updated = await storage.updateEmployee(req.params.employeeId, sanitizedUpdates);
       res.json(updated);
     } catch (error) {
       res.status(500).json({ error: "Failed to update employee" });
@@ -1157,6 +1172,66 @@ export async function registerRoutes(
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete employee" });
+    }
+  });
+
+  // Journal Entries
+  app.get("/api/companies/:companyId/journal-entries", async (req: CompanyRequest, res) => {
+    try {
+      const entries = await storage.getJournalEntries(req.params.companyId);
+      res.json(entries);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch journal entries" });
+    }
+  });
+
+  app.post("/api/companies/:companyId/journal-entries", async (req: CompanyRequest, res) => {
+    try {
+      const parsed = insertJournalEntrySchema.parse({
+        ...req.body,
+        companyId: req.params.companyId,
+      });
+      const entry = await storage.createJournalEntry(parsed);
+      res.status(201).json(entry);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create journal entry" });
+    }
+  });
+
+  app.patch("/api/companies/:companyId/journal-entries/:entryId", async (req: CompanyRequest, res) => {
+    try {
+      const entry = await storage.getJournalEntry(req.params.entryId);
+      if (!entry) {
+        return res.status(404).json({ error: "Journal entry not found" });
+      }
+      if (entry.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Journal entry belongs to different company" });
+      }
+      // Sanitize: remove ownership fields from update payload to prevent cross-company tampering
+      const { companyId, id, createdAt, ...sanitizedUpdates } = req.body;
+      const updated = await storage.updateJournalEntry(req.params.entryId, sanitizedUpdates);
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update journal entry" });
+    }
+  });
+
+  app.delete("/api/companies/:companyId/journal-entries/:entryId", async (req: CompanyRequest, res) => {
+    try {
+      const entry = await storage.getJournalEntry(req.params.entryId);
+      if (!entry) {
+        return res.status(404).json({ error: "Journal entry not found" });
+      }
+      if (entry.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Journal entry belongs to different company" });
+      }
+      await storage.deleteJournalEntry(req.params.entryId);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete journal entry" });
     }
   });
 
@@ -1225,7 +1300,9 @@ export async function registerRoutes(
       if (order.companyId !== req.params.companyId) {
         return res.status(403).json({ error: "Order belongs to different company" });
       }
-      const updated = await storage.updateSalesOrder(req.params.orderId, req.body);
+      // Sanitize: remove ownership fields from update payload to prevent cross-company tampering
+      const { companyId, id, orderNumber, ...sanitizedUpdates } = req.body;
+      const updated = await storage.updateSalesOrder(req.params.orderId, sanitizedUpdates);
       res.json(updated);
     } catch (error) {
       res.status(500).json({ error: "Failed to update sales order" });
@@ -1283,7 +1360,9 @@ export async function registerRoutes(
       if (order.companyId !== req.params.companyId) {
         return res.status(403).json({ error: "Order belongs to different company" });
       }
-      const updated = await storage.updatePurchaseOrder(req.params.orderId, req.body);
+      // Sanitize: remove ownership fields from update payload to prevent cross-company tampering
+      const { companyId, id, orderNumber, ...sanitizedUpdates } = req.body;
+      const updated = await storage.updatePurchaseOrder(req.params.orderId, sanitizedUpdates);
       res.json(updated);
     } catch (error) {
       res.status(500).json({ error: "Failed to update purchase order" });

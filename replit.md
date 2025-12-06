@@ -205,6 +205,8 @@ Dashboard shows onboarding checklist with tasks:
 - Review Settings
 
 ## Recent Changes
+- 2025-12-06: Fixed critical security vulnerability - sanitized all PATCH routes to prevent cross-company data tampering
+- 2025-12-06: Added Journal Entries API routes with full CRUD support
 - 2025-12-06: Converted all master data components to use real API data (Warehouses, Products, Customers, Vendors)
 - 2025-12-06: Added complete CRUD routes for Sales Orders (POST, PATCH, DELETE)
 - 2025-12-06: Added complete CRUD routes for Purchase Orders (POST, PATCH, DELETE)
@@ -237,6 +239,8 @@ Dashboard shows onboarding checklist with tasks:
 - Customers: Full CRUD with credit management
 - Vendors: Full CRUD with payment terms
 - Taxes: Full CRUD with rate configuration
+- Employees: Full CRUD with auto-generated employee numbers
+- Journal Entries: Full CRUD with company scoping
 - Sales Orders: Full CRUD with company scoping
 - Purchase Orders: Full CRUD with company scoping
 
@@ -248,3 +252,33 @@ All master data uses consistent company-scoped endpoints:
 - DELETE `/api/companies/:companyId/{entity}/:id` - Delete
 
 All endpoints validate company ownership before mutations.
+
+## Security: Multi-Tenant Isolation
+
+### PATCH Route Sanitization Pattern
+All PATCH routes sanitize request bodies to prevent cross-company data tampering:
+1. Validate company ownership of the target entity
+2. Destructure to extract and discard ownership fields (`companyId`, `id`, and entity-specific immutable fields)
+3. Pass only sanitized updates to storage methods
+
+```typescript
+// Example pattern used in all PATCH routes:
+const { companyId, id, ...sanitizedUpdates } = req.body;
+const updated = await storage.updateEntity(id, sanitizedUpdates);
+```
+
+### Protected Fields by Entity
+- **All entities**: `companyId`, `id`
+- **Employees**: `employeeNumber` (auto-generated)
+- **Journal Entries**: `createdAt` (system-generated)
+- **Sales/Purchase Orders**: `orderNumber` (auto-generated)
+
+### Company Ownership Validation
+Every mutation route validates that the target entity belongs to the requesting company:
+```typescript
+if (entity.companyId !== req.params.companyId) {
+  return res.status(403).json({ error: "Entity belongs to different company" });
+}
+```
+
+This ensures strict data isolation between companies and prevents cross-tenant data access or mutation.

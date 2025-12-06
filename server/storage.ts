@@ -214,6 +214,7 @@ export class MemStorage implements IStorage {
     this.vendors = new Map();
     this.taxes = new Map();
     this.employees = new Map();
+    this.journalEntries = new Map();
     this.salesOrders = new Map();
     this.purchaseOrders = new Map();
     this.intercompanyTransfers = new Map();
@@ -1536,6 +1537,57 @@ export class MemStorage implements IStorage {
     const employee = this.employees.get(id);
     if (!employee) return false;
     this.employees.delete(id);
+    return true;
+  }
+
+  // ===================== JOURNAL ENTRIES =====================
+  async getJournalEntries(companyId: string): Promise<JournalEntry[]> {
+    return Array.from(this.journalEntries.values()).filter(e => e.companyId === companyId);
+  }
+
+  async getJournalEntry(id: string): Promise<JournalEntry | undefined> {
+    return this.journalEntries.get(id);
+  }
+
+  async createJournalEntry(entry: InsertJournalEntry): Promise<JournalEntry> {
+    const id = randomUUID();
+    const newEntry: JournalEntry = {
+      id,
+      companyId: entry.companyId,
+      entryNumber: entry.entryNumber,
+      entryDate: entry.entryDate ?? new Date(),
+      fiscalPeriodId: entry.fiscalPeriodId ?? null,
+      description: entry.description ?? null,
+      reference: entry.reference ?? null,
+      sourceDocument: entry.sourceDocument ?? null,
+      sourceDocumentId: entry.sourceDocumentId ?? null,
+      status: entry.status ?? "draft",
+      totalDebit: entry.totalDebit ?? "0",
+      totalCredit: entry.totalCredit ?? "0",
+      isIntercompany: entry.isIntercompany ?? false,
+      counterpartyCompanyId: entry.counterpartyCompanyId ?? null,
+      eliminationGroupId: entry.eliminationGroupId ?? null,
+      postedBy: entry.postedBy ?? null,
+      postedAt: entry.postedAt ?? null,
+      createdBy: entry.createdBy ?? null,
+      createdAt: new Date(),
+    };
+    this.journalEntries.set(id, newEntry);
+    return newEntry;
+  }
+
+  async updateJournalEntry(id: string, updates: Partial<JournalEntry>): Promise<JournalEntry | undefined> {
+    const entry = this.journalEntries.get(id);
+    if (!entry) return undefined;
+    const updated = { ...entry, ...updates };
+    this.journalEntries.set(id, updated);
+    return updated;
+  }
+
+  async deleteJournalEntry(id: string): Promise<boolean> {
+    const entry = this.journalEntries.get(id);
+    if (!entry) return false;
+    this.journalEntries.delete(id);
     return true;
   }
 
