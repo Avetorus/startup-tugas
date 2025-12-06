@@ -148,7 +148,54 @@ All endpoints include company context via `x-company-id` header.
 - Professional, clean aesthetics
 - Accessibility compliant
 
+## Authentication System
+
+### JWT Authentication
+- **Access Tokens**: 15-minute stateless tokens with user/company/role claims
+- **Refresh Tokens**: 7-day tokens with rotation, stored in httpOnly cookies
+- **Password Security**: bcrypt hashing (salt rounds 10)
+- **Hierarchy-Based Access**: allowedCompanyIds computed from company level
+
+### Auth Endpoints
+- `POST /api/auth/login` - Authenticate with username/password
+- `POST /api/auth/refresh` - Rotate access token
+- `POST /api/auth/logout` - Revoke refresh token
+- `GET /api/auth/me` - Get current user info
+- `POST /api/auth/switch-company` - Change active company
+
+### Demo Credentials
+- Admin: `admin` / `admin123` (Holding level - sees all)
+- Manager: `john.manager` / `password` (Subsidiary level)
+- Accountant: `jane.accountant` / `password` (EU Subsidiary)
+
+## First-Time Setup Flow
+
+### Setup Wizard
+When the system starts with no companies, users are guided through:
+1. **Company Registration**: Create the holding company (name, code, currency, timezone, address)
+2. **Admin Account Creation**: Create the first Super Admin user
+3. **Login**: Redirect to login after setup complete
+
+### Setup Endpoints (Public)
+- `GET /api/setup/status` - Check if system needs setup
+- `POST /api/setup/company` - Create first company (only when no companies exist)
+- `POST /api/setup/admin` - Create first admin (only after company exists)
+
+### Post-Login Onboarding
+Dashboard shows onboarding checklist with tasks:
+- Set up Chart of Accounts
+- Create Warehouses
+- Add Team Members
+- Add Subsidiaries/Branches
+- Configure User Roles
+- Review Settings
+
 ## Recent Changes
+- 2025-12-06: Implemented first-time setup wizard (company registration + admin creation)
+- 2025-12-06: Added onboarding checklist to dashboard for post-setup tasks
+- 2025-12-06: Implemented JWT authentication with refresh token rotation
+- 2025-12-06: Added hierarchy-based access control via allowedCompanyIds
+- 2025-12-06: Secured all API routes with JWT middleware (except auth endpoints)
 - 2025-12-05: Implemented multi-company architecture with unlimited depth hierarchy
 - 2025-12-05: Added company switcher to header with hierarchy visualization
 - 2025-12-05: Created Company Management module (CRUD, hierarchy display)

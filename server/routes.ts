@@ -36,11 +36,14 @@ interface CompanyRequest extends Request {
 
 // Public routes that don't require authentication
 // Note: These paths are relative to the /api mount point
-// Only auth endpoints are truly public - all others require JWT
+// Only auth endpoints and setup endpoints are truly public - all others require JWT
 const publicRoutes = [
   "/auth/login",
   "/auth/refresh",
   "/auth/logout",
+  "/setup/status",
+  "/setup/company",
+  "/setup/admin",
 ];
 
 async function companyContextMiddleware(
@@ -66,11 +69,14 @@ async function companyContextMiddleware(
   }
 
   // Build company context from JWT claims
+  const rolePermissions = req.auth.role?.permissions;
+  const permissionsArray = Array.isArray(rolePermissions) ? rolePermissions : [];
+  
   req.companyContext = {
     activeCompanyId: req.auth.activeCompanyId,
     activeCompany: req.auth.activeCompany,
     userCompanies: [req.auth.activeCompany],
-    permissions: req.auth.role?.permissions || [],
+    permissions: permissionsArray,
     role: req.auth.role,
     companyLevel: req.auth.companyLevel,
     accessibleCompanyIds: req.auth.allowedCompanyIds,
@@ -314,10 +320,249 @@ export async function registerRoutes(
   });
 
   // ============================================================================
+  // FIRST-TIME SETUP (Public - only works when system is uninitialized)
+  // ============================================================================
+
+  // Setup status - Check if system needs initial setup
+  app.get("/api/setup/status", async (req: Request, res: Response) => {
+    try {
+      const stats = await storage.getSystemStats();
+      const isInitialized = stats.companyCount > 0;
+      
+      res.json({
+        isInitialized,
+        needsCompanySetup: stats.companyCount === 0,
+        needsAdminSetup: stats.companyCount > 0 && stats.userCount === 0,
+        stats,
+      });
+    } catch (error) {
+      console.error("Setup status error:", error);
+      res.status(500).json({ error: "Failed to get setup status" });
+    }
+  });
+
+  // Setup company - Create the first company (only when no companies exist)
+  const setupCompanySchema = z.object({
+    code: z.string().min(2).max(20).regex(/^[A-Z0-9-]+$/, "Code must be uppercase alphanumeric with dashes"),
+    name: z.string().min(2).max(100),
+    legalName: z.string().optional(),
+    taxId: z.string().optional(),
+    companyType: z.enum(["holding", "subsidiary", "branch"]),
+    currency: z.string().length(3).default("USD"),
+    timezone: z.string().default("UTC"),
+    locale: z.string().default("en-US"),
+    address: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
+    country: z.string().length(2).optional(),
+    postalCode: z.string().optional(),
+    phone: z.string().optional(),
+    email: z.string().email().optional(),
+    website: z.string().url().optional(),
+  });
+
+  app.post("/api/setup/company", async (req: Request, res: Response) => {
+    try {
+      // Only allow if no companies exist
+      const stats = await storage.getSystemStats();
+      if (stats.companyCount > 0) {
+        return res.status(400).json({ 
+          error: "System is already initialized. Cannot create initial company." 
+        });
+      }
+
+      const parsed = setupCompanySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ 
+          error: "Invalid company data", 
+          details: parsed.error.errors 
+        });
+      }
+
+      const data = parsed.data;
+
+      // First company must be a holding company (level 1)
+      if (data.companyType !== "holding") {
+        return res.status(400).json({ 
+          error: "The first company must be a Holding company (top level of hierarchy)" 
+        });
+      }
+
+      // Create the holding company (level and path are auto-calculated by storage)
+      const company = await storage.createCompany({
+        code: data.code,
+        name: data.name,
+        legalName: data.legalName || data.name,
+        taxId: data.taxId,
+        parentId: null,
+        companyType: "holding",
+        currency: data.currency,
+        locale: data.locale,
+        timezone: data.timezone,
+        address: data.address,
+        city: data.city,
+        state: data.state,
+        country: data.country,
+        postalCode: data.postalCode,
+        phone: data.phone,
+        email: data.email,
+        website: data.website,
+        consolidationEnabled: true,
+        isActive: true,
+      });
+
+      // Create default company settings
+      await storage.createCompanySettings({
+        companyId: company.id,
+        fiscalYearStart: 1,
+        fiscalYearEnd: 12,
+        defaultPaymentTerms: 30,
+        inventoryCostingMethod: "fifo",
+        multiCurrencyEnabled: false,
+        intercompanyEnabled: true,
+        autoPostIntercompany: false,
+      });
+
+      res.status(201).json({
+        success: true,
+        company: {
+          id: company.id,
+          code: company.code,
+          name: company.name,
+          companyType: company.companyType,
+          level: company.level,
+        },
+        nextStep: "Create the first Super Admin account",
+      });
+    } catch (error) {
+      console.error("Setup company error:", error);
+      res.status(500).json({ error: "Failed to create company" });
+    }
+  });
+
+  // Setup admin - Create the first Super Admin (only when company exists but no users)
+  const setupAdminSchema = z.object({
+    companyId: z.string().uuid(),
+    username: z.string().min(3).max(50).regex(/^[a-zA-Z0-9._-]+$/, "Username must be alphanumeric with ._-"),
+    password: z.string().min(8, "Password must be at least 8 characters"),
+    email: z.string().email(),
+    fullName: z.string().min(2).max(100),
+  });
+
+  app.post("/api/setup/admin", async (req: Request, res: Response) => {
+    try {
+      // Only allow if company exists but no users
+      const stats = await storage.getSystemStats();
+      if (stats.companyCount === 0) {
+        return res.status(400).json({ 
+          error: "Create a company first before creating the admin account" 
+        });
+      }
+      if (stats.userCount > 0) {
+        return res.status(400).json({ 
+          error: "Admin account already exists. Use login instead." 
+        });
+      }
+
+      const parsed = setupAdminSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ 
+          error: "Invalid admin data", 
+          details: parsed.error.errors 
+        });
+      }
+
+      const data = parsed.data;
+
+      // Verify company exists
+      const company = await storage.getCompany(data.companyId);
+      if (!company) {
+        return res.status(400).json({ error: "Invalid company ID" });
+      }
+
+      // Check if username is taken
+      const existingUser = await storage.getUserByUsername(data.username);
+      if (existingUser) {
+        return res.status(400).json({ error: "Username already taken" });
+      }
+
+      // Get or create Super Admin role
+      let adminRole = await storage.getRoleByCode("SUPER_ADMIN");
+      if (!adminRole) {
+        adminRole = await storage.getRoleByCode("ADMIN");
+      }
+      if (!adminRole) {
+        // Create SUPER_ADMIN role if it doesn't exist
+        adminRole = await storage.createRole({
+          code: "SUPER_ADMIN",
+          name: "Super Administrator",
+          description: "Full system access with all permissions",
+          isSystemRole: true,
+          permissions: ["*"],
+        });
+      }
+
+      // Create the admin user (password will be hashed by storage layer)
+      const user = await storage.createUser({
+        username: data.username,
+        password: data.password,
+        email: data.email,
+        fullName: data.fullName,
+      });
+
+      // Set the user's default company
+      await storage.updateUser(user.id, { defaultCompanyId: company.id });
+
+      // Assign user to company with admin role
+      await storage.assignUserToCompany({
+        userId: user.id,
+        companyId: company.id,
+        roleId: adminRole.id,
+        isActive: true,
+        isDefault: true,
+      });
+
+      // Log the setup event
+      await storage.createAuthAuditLog({
+        userId: user.id,
+        eventType: "setup_complete",
+        companyId: company.id,
+        ipAddress: req.ip || req.socket.remoteAddress,
+        deviceInfo: req.headers["user-agent"],
+        success: true,
+        metadata: { action: "first_admin_created" },
+      });
+
+      res.status(201).json({
+        success: true,
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          fullName: user.fullName,
+        },
+        company: {
+          id: company.id,
+          code: company.code,
+          name: company.name,
+        },
+        role: {
+          id: adminRole.id,
+          name: adminRole.name,
+        },
+        message: "Setup complete! You can now log in with your credentials.",
+      });
+    } catch (error) {
+      console.error("Setup admin error:", error);
+      res.status(500).json({ error: "Failed to create admin account" });
+    }
+  });
+
+  // ============================================================================
   // COMPANY MANAGEMENT
   // ============================================================================
 
-  // Get all companies (for company switcher) - PUBLIC
+  // Get all companies (for company switcher)
   app.get("/api/companies", async (req: CompanyRequest, res) => {
     try {
       const companies = await storage.getCompanies();

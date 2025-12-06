@@ -1,6 +1,6 @@
 import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -11,6 +11,7 @@ import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { CompanySwitcher } from "@/components/CompanySwitcher";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { Login } from "@/pages/Login";
+import { Setup } from "@/pages/Setup";
 import { Button } from "@/components/ui/button";
 import { LogOut, User } from "lucide-react";
 import {
@@ -162,11 +163,25 @@ function AuthenticatedApp() {
   );
 }
 
+interface SetupStatus {
+  isInitialized: boolean;
+  needsCompanySetup: boolean;
+  needsAdminSetup: boolean;
+}
+
 function AppRouter() {
   const { isAuthenticated, isLoading } = useAuth();
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
 
-  if (isLoading && location !== "/login") {
+  const { data: setupStatus, isLoading: setupLoading } = useQuery<SetupStatus>({
+    queryKey: ["/api/setup/status"],
+    retry: false,
+    staleTime: 60000,
+  });
+
+  const needsSetup = setupStatus && (!setupStatus.isInitialized || setupStatus.needsAdminSetup);
+
+  if ((isLoading || setupLoading) && location !== "/login" && location !== "/setup") {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="text-center">
@@ -177,8 +192,13 @@ function AppRouter() {
     );
   }
 
+  if (needsSetup && location !== "/setup") {
+    return <Redirect to="/setup" />;
+  }
+
   return (
     <Switch>
+      <Route path="/setup" component={Setup} />
       <Route path="/login" component={Login} />
       <Route>
         {isAuthenticated ? <AuthenticatedApp /> : <Redirect to="/login" />}

@@ -144,6 +144,10 @@ export interface IStorage {
   // Additional methods for auth
   getAllCompanies(): Promise<Company[]>;
   getUserCompanyRole(userId: string, companyId: string): Promise<UserCompanyRole | undefined>;
+  
+  // System initialization
+  isSystemInitialized(): Promise<boolean>;
+  getSystemStats(): Promise<{ companyCount: number; userCount: number }>;
 }
 
 // ============================================================================
@@ -472,6 +476,182 @@ export class MemStorage implements IStorage {
       isActive: true,
     };
     this.userCompanyRoles.set(accountantAssignment.id, accountantAssignment);
+
+    // Seed Chart of Accounts for holding company
+    const seedAccounts: Account[] = [
+      {
+        id: "acc-assets",
+        companyId: holdingCompany.id,
+        accountCode: "1000",
+        name: "Assets",
+        accountType: "asset",
+        level: 1,
+        parentId: null,
+        balance: "0",
+        isPostable: false,
+        isActive: true,
+        consolidationAccountId: null,
+        createdAt: new Date(),
+      },
+      {
+        id: "acc-cash",
+        companyId: holdingCompany.id,
+        accountCode: "1100",
+        name: "Cash and Cash Equivalents",
+        accountType: "asset",
+        level: 2,
+        parentId: "acc-assets",
+        balance: "50000",
+        isPostable: true,
+        isActive: true,
+        consolidationAccountId: null,
+        createdAt: new Date(),
+      },
+      {
+        id: "acc-receivables",
+        companyId: holdingCompany.id,
+        accountCode: "1200",
+        name: "Accounts Receivable",
+        accountType: "asset",
+        level: 2,
+        parentId: "acc-assets",
+        balance: "25000",
+        isPostable: true,
+        isActive: true,
+        consolidationAccountId: null,
+        createdAt: new Date(),
+      },
+      {
+        id: "acc-liabilities",
+        companyId: holdingCompany.id,
+        accountCode: "2000",
+        name: "Liabilities",
+        accountType: "liability",
+        level: 1,
+        parentId: null,
+        balance: "0",
+        isPostable: false,
+        isActive: true,
+        consolidationAccountId: null,
+        createdAt: new Date(),
+      },
+      {
+        id: "acc-payables",
+        companyId: holdingCompany.id,
+        accountCode: "2100",
+        name: "Accounts Payable",
+        accountType: "liability",
+        level: 2,
+        parentId: "acc-liabilities",
+        balance: "15000",
+        isPostable: true,
+        isActive: true,
+        consolidationAccountId: null,
+        createdAt: new Date(),
+      },
+      {
+        id: "acc-equity",
+        companyId: holdingCompany.id,
+        accountCode: "3000",
+        name: "Equity",
+        accountType: "equity",
+        level: 1,
+        parentId: null,
+        balance: "100000",
+        isPostable: true,
+        isActive: true,
+        consolidationAccountId: null,
+        createdAt: new Date(),
+      },
+      {
+        id: "acc-revenue",
+        companyId: holdingCompany.id,
+        accountCode: "4000",
+        name: "Revenue",
+        accountType: "revenue",
+        level: 1,
+        parentId: null,
+        balance: "0",
+        isPostable: false,
+        isActive: true,
+        consolidationAccountId: null,
+        createdAt: new Date(),
+      },
+      {
+        id: "acc-sales",
+        companyId: holdingCompany.id,
+        accountCode: "4100",
+        name: "Sales Revenue",
+        accountType: "revenue",
+        level: 2,
+        parentId: "acc-revenue",
+        balance: "250000",
+        isPostable: true,
+        isActive: true,
+        consolidationAccountId: null,
+        createdAt: new Date(),
+      },
+      {
+        id: "acc-expenses",
+        companyId: holdingCompany.id,
+        accountCode: "5000",
+        name: "Expenses",
+        accountType: "expense",
+        level: 1,
+        parentId: null,
+        balance: "0",
+        isPostable: false,
+        isActive: true,
+        consolidationAccountId: null,
+        createdAt: new Date(),
+      },
+      {
+        id: "acc-operating",
+        companyId: holdingCompany.id,
+        accountCode: "5100",
+        name: "Operating Expenses",
+        accountType: "expense",
+        level: 2,
+        parentId: "acc-expenses",
+        balance: "75000",
+        isPostable: true,
+        isActive: true,
+        consolidationAccountId: null,
+        createdAt: new Date(),
+      },
+    ];
+    seedAccounts.forEach(acc => this.accounts.set(acc.id, acc));
+
+    // Seed Warehouses for holding company
+    const seedWarehouses: Warehouse[] = [
+      {
+        id: "wh-main",
+        companyId: holdingCompany.id,
+        code: "WH-MAIN",
+        name: "Main Warehouse",
+        address: "123 Logistics Way",
+        city: "Metropolis",
+        state: "NY",
+        country: "US",
+        postalCode: "10001",
+        isActive: true,
+        createdAt: new Date(),
+      },
+      {
+        id: "wh-distribution",
+        companyId: holdingCompany.id,
+        code: "WH-DIST",
+        name: "Distribution Center",
+        address: "456 Distribution Blvd",
+        city: "Metropolis",
+        state: "NY",
+        country: "US",
+        postalCode: "10002",
+        isActive: true,
+        createdAt: new Date(),
+      },
+    ];
+    seedWarehouses.forEach(wh => this.warehouses.set(wh.id, wh));
   }
 
   // ===================== USERS =====================
@@ -1462,6 +1642,19 @@ export class MemStorage implements IStorage {
     return Array.from(this.userCompanyRoles.values()).find(
       ucr => ucr.userId === userId && ucr.companyId === companyId && ucr.isActive
     );
+  }
+
+  // ===================== SYSTEM INITIALIZATION =====================
+  async isSystemInitialized(): Promise<boolean> {
+    // System is initialized if there is at least one company
+    return this.companies.size > 0;
+  }
+
+  async getSystemStats(): Promise<{ companyCount: number; userCount: number }> {
+    return {
+      companyCount: this.companies.size,
+      userCount: this.users.size,
+    };
   }
 }
 

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StatCard } from "@/components/layout/StatCard";
 import { StatusBadge } from "@/components/layout/StatusBadge";
+import { OnboardingChecklist } from "@/components/onboarding/OnboardingChecklist";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { 
@@ -30,6 +31,8 @@ export function Dashboard() {
         title="Dashboard"
         description={`Welcome back! Here's what's happening today.`}
       />
+
+      <OnboardingChecklist />
 
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard
