@@ -97,7 +97,7 @@ export function Settings() {
         description: "Company settings have been updated successfully.",
       });
       queryClientInstance.invalidateQueries({ queryKey: ["/api/companies"] });
-      queryClientInstance.invalidateQueries({ queryKey: ["/api/session/context"] });
+      queryClientInstance.invalidateQueries({ queryKey: ["/api/session/context", activeCompanyId] });
       queryClientInstance.invalidateQueries({ queryKey: ["/api/companies/hierarchy"] });
       refreshContext();
     },
