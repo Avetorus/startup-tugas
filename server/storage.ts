@@ -19,7 +19,10 @@ import {
   type SharedAccess, type InsertSharedAccess,
   type RefreshToken, type InsertRefreshToken,
   type AuthAuditLog, type InsertAuthAuditLog,
-  type CompanyContext, type CompanyHierarchyNode
+  type CompanyContext, type CompanyHierarchyNode,
+  type StockLevel, type StockMovement,
+  type Delivery, type GoodsReceipt,
+  type Invoice, type Payment, type ArApLedger
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
@@ -172,6 +175,32 @@ export interface IStorage {
   // System initialization
   isSystemInitialized(): Promise<boolean>;
   getSystemStats(): Promise<{ companyCount: number; userCount: number }>;
+  
+  // Stock Levels
+  getStockLevels(companyId: string): Promise<StockLevel[]>;
+  getStockLevel(companyId: string, productId: string, warehouseId: string): Promise<StockLevel | undefined>;
+  
+  // Stock Movements
+  getStockMovements(companyId: string): Promise<StockMovement[]>;
+  
+  // Deliveries
+  getDeliveries(companyId: string): Promise<Delivery[]>;
+  getDelivery(id: string): Promise<Delivery | undefined>;
+  
+  // Goods Receipts
+  getGoodsReceipts(companyId: string): Promise<GoodsReceipt[]>;
+  getGoodsReceipt(id: string): Promise<GoodsReceipt | undefined>;
+  
+  // Invoices
+  getInvoices(companyId: string): Promise<Invoice[]>;
+  getInvoice(id: string): Promise<Invoice | undefined>;
+  
+  // Payments
+  getPayments(companyId: string): Promise<Payment[]>;
+  getPayment(id: string): Promise<Payment | undefined>;
+  
+  // AR/AP Ledger
+  getArApLedger(companyId: string, ledgerType: string): Promise<ArApLedger[]>;
 }
 
 // ============================================================================
@@ -1859,6 +1888,55 @@ export class MemStorage implements IStorage {
       companyCount: this.companies.size,
       userCount: this.users.size,
     };
+  }
+
+  // Stock Levels - stub implementations for MemStorage
+  async getStockLevels(companyId: string): Promise<StockLevel[]> {
+    return [];
+  }
+
+  async getStockLevel(companyId: string, productId: string, warehouseId: string): Promise<StockLevel | undefined> {
+    return undefined;
+  }
+
+  async getStockMovements(companyId: string): Promise<StockMovement[]> {
+    return [];
+  }
+
+  async getDeliveries(companyId: string): Promise<Delivery[]> {
+    return [];
+  }
+
+  async getDelivery(id: string): Promise<Delivery | undefined> {
+    return undefined;
+  }
+
+  async getGoodsReceipts(companyId: string): Promise<GoodsReceipt[]> {
+    return [];
+  }
+
+  async getGoodsReceipt(id: string): Promise<GoodsReceipt | undefined> {
+    return undefined;
+  }
+
+  async getInvoices(companyId: string): Promise<Invoice[]> {
+    return [];
+  }
+
+  async getInvoice(id: string): Promise<Invoice | undefined> {
+    return undefined;
+  }
+
+  async getPayments(companyId: string): Promise<Payment[]> {
+    return [];
+  }
+
+  async getPayment(id: string): Promise<Payment | undefined> {
+    return undefined;
+  }
+
+  async getArApLedger(companyId: string, ledgerType: string): Promise<ArApLedger[]> {
+    return [];
   }
 }
 

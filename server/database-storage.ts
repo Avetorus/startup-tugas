@@ -5,6 +5,7 @@ import {
   chartOfAccounts, warehouses, products, customers, vendors, taxes, employees,
   journalEntries, salesOrders, purchaseOrders, intercompanyTransfers, sharedAccess,
   refreshTokens, authAuditLog,
+  stockLevels, stockMovements, deliveries, goodsReceipts, invoices, payments, arApLedger,
   type User, type InsertUser,
   type Company, type InsertCompany,
   type CompanySettings, type InsertCompanySettings,
@@ -25,7 +26,10 @@ import {
   type SharedAccess, type InsertSharedAccess,
   type RefreshToken, type InsertRefreshToken,
   type AuthAuditLog, type InsertAuthAuditLog,
-  type CompanyContext, type CompanyHierarchyNode
+  type CompanyContext, type CompanyHierarchyNode,
+  type StockLevel, type StockMovement,
+  type Delivery, type GoodsReceipt,
+  type Invoice, type Payment, type ArApLedger
 } from "@shared/schema";
 import type { IStorage } from "./storage";
 import bcrypt from "bcryptjs";
@@ -905,5 +909,87 @@ export class DatabaseStorage implements IStorage {
       companyCount: Number(companyResult?.count || 0),
       userCount: Number(userResult?.count || 0),
     };
+  }
+
+  // ===================== STOCK LEVELS =====================
+  async getStockLevels(companyId: string): Promise<StockLevel[]> {
+    return db.select().from(stockLevels)
+      .where(eq(stockLevels.companyId, companyId))
+      .orderBy(desc(stockLevels.updatedAt));
+  }
+
+  async getStockLevel(companyId: string, productId: string, warehouseId: string): Promise<StockLevel | undefined> {
+    const [level] = await db.select().from(stockLevels)
+      .where(and(
+        eq(stockLevels.companyId, companyId),
+        eq(stockLevels.productId, productId),
+        eq(stockLevels.warehouseId, warehouseId)
+      ));
+    return level || undefined;
+  }
+
+  // ===================== STOCK MOVEMENTS =====================
+  async getStockMovements(companyId: string): Promise<StockMovement[]> {
+    return db.select().from(stockMovements)
+      .where(eq(stockMovements.companyId, companyId))
+      .orderBy(desc(stockMovements.movementDate));
+  }
+
+  // ===================== DELIVERIES =====================
+  async getDeliveries(companyId: string): Promise<Delivery[]> {
+    return db.select().from(deliveries)
+      .where(eq(deliveries.companyId, companyId))
+      .orderBy(desc(deliveries.deliveryDate));
+  }
+
+  async getDelivery(id: string): Promise<Delivery | undefined> {
+    const [delivery] = await db.select().from(deliveries).where(eq(deliveries.id, id));
+    return delivery || undefined;
+  }
+
+  // ===================== GOODS RECEIPTS =====================
+  async getGoodsReceipts(companyId: string): Promise<GoodsReceipt[]> {
+    return db.select().from(goodsReceipts)
+      .where(eq(goodsReceipts.companyId, companyId))
+      .orderBy(desc(goodsReceipts.receiptDate));
+  }
+
+  async getGoodsReceipt(id: string): Promise<GoodsReceipt | undefined> {
+    const [receipt] = await db.select().from(goodsReceipts).where(eq(goodsReceipts.id, id));
+    return receipt || undefined;
+  }
+
+  // ===================== INVOICES =====================
+  async getInvoices(companyId: string): Promise<Invoice[]> {
+    return db.select().from(invoices)
+      .where(eq(invoices.companyId, companyId))
+      .orderBy(desc(invoices.invoiceDate));
+  }
+
+  async getInvoice(id: string): Promise<Invoice | undefined> {
+    const [invoice] = await db.select().from(invoices).where(eq(invoices.id, id));
+    return invoice || undefined;
+  }
+
+  // ===================== PAYMENTS =====================
+  async getPayments(companyId: string): Promise<Payment[]> {
+    return db.select().from(payments)
+      .where(eq(payments.companyId, companyId))
+      .orderBy(desc(payments.paymentDate));
+  }
+
+  async getPayment(id: string): Promise<Payment | undefined> {
+    const [payment] = await db.select().from(payments).where(eq(payments.id, id));
+    return payment || undefined;
+  }
+
+  // ===================== AR/AP LEDGER =====================
+  async getArApLedger(companyId: string, ledgerType: string): Promise<ArApLedger[]> {
+    return db.select().from(arApLedger)
+      .where(and(
+        eq(arApLedger.companyId, companyId),
+        eq(arApLedger.ledgerType, ledgerType)
+      ))
+      .orderBy(desc(arApLedger.transactionDate));
   }
 }

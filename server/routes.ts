@@ -1386,6 +1386,323 @@ export async function registerRoutes(
   });
 
   // ============================================================================
+  // WORKFLOW ACTIONS - SALES ORDER LIFECYCLE
+  // ============================================================================
+
+  // Confirm Sales Order - reserves stock
+  app.post("/api/companies/:companyId/sales-orders/:orderId/confirm", async (req: CompanyRequest, res) => {
+    try {
+      const { workflowService } = await import("./services/workflow-service");
+      const order = await storage.getSalesOrder(req.params.orderId);
+      if (!order) {
+        return res.status(404).json({ error: "Sales order not found" });
+      }
+      if (order.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Order belongs to different company" });
+      }
+      const result = await workflowService.confirmSalesOrder(
+        req.params.orderId,
+        req.userId || ""
+      );
+      res.json({
+        success: true,
+        message: "Sales order confirmed and stock reserved",
+        salesOrder: result.salesOrder,
+        reservations: result.reservations
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to confirm sales order" });
+    }
+  });
+
+  // Deliver Sales Order - reduces stock, creates delivery note
+  app.post("/api/companies/:companyId/sales-orders/:orderId/deliver", async (req: CompanyRequest, res) => {
+    try {
+      const { workflowService } = await import("./services/workflow-service");
+      const order = await storage.getSalesOrder(req.params.orderId);
+      if (!order) {
+        return res.status(404).json({ error: "Sales order not found" });
+      }
+      if (order.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Order belongs to different company" });
+      }
+      const result = await workflowService.createDeliveryFromSalesOrder(
+        req.params.orderId,
+        req.userId || ""
+      );
+      res.json({
+        success: true,
+        message: "Delivery created and inventory updated",
+        delivery: result.delivery,
+        deliveryLines: result.deliveryLines,
+        stockMovements: result.stockMovements,
+        journalEntry: result.journalEntry
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to create delivery" });
+    }
+  });
+
+  // Invoice Sales Order - creates AR invoice
+  app.post("/api/companies/:companyId/sales-orders/:orderId/invoice", async (req: CompanyRequest, res) => {
+    try {
+      const { workflowService } = await import("./services/workflow-service");
+      const order = await storage.getSalesOrder(req.params.orderId);
+      if (!order) {
+        return res.status(404).json({ error: "Sales order not found" });
+      }
+      if (order.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Order belongs to different company" });
+      }
+      const result = await workflowService.createInvoiceFromSalesOrder(
+        req.params.orderId,
+        req.userId || ""
+      );
+      res.json({
+        success: true,
+        message: "Invoice created and AR updated",
+        invoice: result.invoice,
+        invoiceLines: result.invoiceLines,
+        journalEntry: result.journalEntry,
+        arLedgerEntry: result.arLedgerEntry
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to create invoice" });
+    }
+  });
+
+  // ============================================================================
+  // WORKFLOW ACTIONS - PURCHASE ORDER LIFECYCLE
+  // ============================================================================
+
+  // Confirm Purchase Order
+  app.post("/api/companies/:companyId/purchase-orders/:orderId/confirm", async (req: CompanyRequest, res) => {
+    try {
+      const { workflowService } = await import("./services/workflow-service");
+      const order = await storage.getPurchaseOrder(req.params.orderId);
+      if (!order) {
+        return res.status(404).json({ error: "Purchase order not found" });
+      }
+      if (order.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Order belongs to different company" });
+      }
+      const result = await workflowService.confirmPurchaseOrder(
+        req.params.orderId,
+        req.userId || ""
+      );
+      res.json({
+        success: true,
+        message: "Purchase order confirmed",
+        purchaseOrder: result
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to confirm purchase order" });
+    }
+  });
+
+  // Receive Goods from Purchase Order - increases stock
+  app.post("/api/companies/:companyId/purchase-orders/:orderId/receive", async (req: CompanyRequest, res) => {
+    try {
+      const { workflowService } = await import("./services/workflow-service");
+      const order = await storage.getPurchaseOrder(req.params.orderId);
+      if (!order) {
+        return res.status(404).json({ error: "Purchase order not found" });
+      }
+      if (order.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Order belongs to different company" });
+      }
+      const result = await workflowService.receiveGoodsFromPurchaseOrder(
+        req.params.orderId,
+        req.userId || ""
+      );
+      res.json({
+        success: true,
+        message: "Goods received and inventory updated",
+        goodsReceipt: result.goodsReceipt,
+        goodsReceiptLines: result.goodsReceiptLines,
+        stockMovements: result.stockMovements,
+        journalEntry: result.journalEntry
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to receive goods" });
+    }
+  });
+
+  // Bill Purchase Order - creates AP invoice
+  app.post("/api/companies/:companyId/purchase-orders/:orderId/bill", async (req: CompanyRequest, res) => {
+    try {
+      const { workflowService } = await import("./services/workflow-service");
+      const order = await storage.getPurchaseOrder(req.params.orderId);
+      if (!order) {
+        return res.status(404).json({ error: "Purchase order not found" });
+      }
+      if (order.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Order belongs to different company" });
+      }
+      const result = await workflowService.createVendorInvoice(
+        req.params.orderId,
+        req.userId || ""
+      );
+      res.json({
+        success: true,
+        message: "Vendor invoice created and AP updated",
+        invoice: result.invoice,
+        invoiceLines: result.invoiceLines,
+        journalEntry: result.journalEntry,
+        apLedgerEntry: result.apLedgerEntry
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to create vendor invoice" });
+    }
+  });
+
+  // ============================================================================
+  // WORKFLOW ACTIONS - PAYMENTS
+  // ============================================================================
+
+  // Receive Customer Payment
+  app.post("/api/companies/:companyId/payments/receive", async (req: CompanyRequest, res) => {
+    try {
+      const { workflowService } = await import("./services/workflow-service");
+      const { customerId, invoiceIds, amount, paymentMethod, bankAccountId } = req.body;
+      
+      if (!customerId || !amount) {
+        return res.status(400).json({ error: "Customer ID and amount are required" });
+      }
+
+      const result = await workflowService.receivePayment(
+        req.params.companyId,
+        customerId,
+        invoiceIds || [],
+        parseFloat(amount),
+        paymentMethod || "bank_transfer",
+        bankAccountId || "",
+        req.userId || ""
+      );
+      res.json({
+        success: true,
+        message: "Payment received and AR updated",
+        payment: result.payment,
+        applications: result.applications,
+        journalEntry: result.journalEntry,
+        arLedgerEntry: result.arLedgerEntry
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to receive payment" });
+    }
+  });
+
+  // Make Vendor Payment
+  app.post("/api/companies/:companyId/payments/pay", async (req: CompanyRequest, res) => {
+    try {
+      const { workflowService } = await import("./services/workflow-service");
+      const { vendorId, invoiceIds, amount, paymentMethod, bankAccountId } = req.body;
+      
+      if (!vendorId || !amount) {
+        return res.status(400).json({ error: "Vendor ID and amount are required" });
+      }
+
+      const result = await workflowService.makeVendorPayment(
+        req.params.companyId,
+        vendorId,
+        invoiceIds || [],
+        parseFloat(amount),
+        paymentMethod || "bank_transfer",
+        bankAccountId || "",
+        req.userId || ""
+      );
+      res.json({
+        success: true,
+        message: "Payment made and AP updated",
+        payment: result.payment,
+        applications: result.applications,
+        journalEntry: result.journalEntry,
+        apLedgerEntry: result.apLedgerEntry
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to make payment" });
+    }
+  });
+
+  // ============================================================================
+  // STOCK LEVELS & INVENTORY QUERIES
+  // ============================================================================
+
+  // Get stock levels for a company
+  app.get("/api/companies/:companyId/stock-levels", async (req: CompanyRequest, res) => {
+    try {
+      const stockLevels = await storage.getStockLevels(req.params.companyId);
+      res.json(stockLevels);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch stock levels" });
+    }
+  });
+
+  // Get stock movements for a company
+  app.get("/api/companies/:companyId/stock-movements", async (req: CompanyRequest, res) => {
+    try {
+      const movements = await storage.getStockMovements(req.params.companyId);
+      res.json(movements);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch stock movements" });
+    }
+  });
+
+  // Get invoices for a company
+  app.get("/api/companies/:companyId/invoices", async (req: CompanyRequest, res) => {
+    try {
+      const invoices = await storage.getInvoices(req.params.companyId);
+      res.json(invoices);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch invoices" });
+    }
+  });
+
+  // Get deliveries for a company
+  app.get("/api/companies/:companyId/deliveries", async (req: CompanyRequest, res) => {
+    try {
+      const deliveries = await storage.getDeliveries(req.params.companyId);
+      res.json(deliveries);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch deliveries" });
+    }
+  });
+
+  // Get goods receipts for a company
+  app.get("/api/companies/:companyId/goods-receipts", async (req: CompanyRequest, res) => {
+    try {
+      const receipts = await storage.getGoodsReceipts(req.params.companyId);
+      res.json(receipts);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch goods receipts" });
+    }
+  });
+
+  // Get payments for a company
+  app.get("/api/companies/:companyId/payments", async (req: CompanyRequest, res) => {
+    try {
+      const payments = await storage.getPayments(req.params.companyId);
+      res.json(payments);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch payments" });
+    }
+  });
+
+  // Get AR/AP ledger entries
+  app.get("/api/companies/:companyId/ledger/:ledgerType", async (req: CompanyRequest, res) => {
+    try {
+      const { ledgerType } = req.params;
+      if (!["AR", "AP"].includes(ledgerType)) {
+        return res.status(400).json({ error: "Ledger type must be AR or AP" });
+      }
+      const entries = await storage.getArApLedger(req.params.companyId, ledgerType);
+      res.json(entries);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch ledger entries" });
+    }
+  });
+
+  // ============================================================================
   // INTERCOMPANY TRANSACTIONS
   // ============================================================================
 
