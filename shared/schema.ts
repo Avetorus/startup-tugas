@@ -38,7 +38,7 @@ export const companies = pgTable("companies", {
   path: text("path").notNull(), // Materialized path for hierarchy (e.g., "HOLDING/SUBSIDIARY/BRANCH")
   level: integer("level").notNull().default(1), // 1=Holding, 2=Subsidiary, 3=Branch (max depth)
   companyType: varchar("company_type", { length: 50 }).notNull().default("holding"), // holding, subsidiary, branch only
-  currency: varchar("currency", { length: 3 }).notNull().default("USD"),
+  currency: varchar("currency", { length: 3 }).notNull().default("IDR"),
   locale: varchar("locale", { length: 10 }).default("en-US"),
   timezone: varchar("timezone", { length: 50 }).default("UTC"),
   address: text("address"),
