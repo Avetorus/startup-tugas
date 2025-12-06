@@ -438,7 +438,7 @@ function SalesOrderFormInline({ order, customers, products, onSubmit, onCancel, 
         const product = products.find((p) => p.id === value);
         if (product) {
           updated.productName = product.name;
-          updated.price = parseFloat(product.unitPrice || "0");
+          updated.price = parseFloat(product.price || "0");
         }
       }
 
@@ -518,7 +518,7 @@ function SalesOrderFormInline({ order, customers, products, onSubmit, onCancel, 
                   <SelectContent>
                     {products.map((product) => (
                       <SelectItem key={product.id} value={product.id}>
-                        {product.name} (${parseFloat(product.unitPrice || "0").toFixed(2)})
+                        {product.name} (${parseFloat(product.price || "0").toFixed(2)})
                       </SelectItem>
                     ))}
                   </SelectContent>

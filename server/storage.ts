@@ -139,6 +139,7 @@ export interface IStorage {
   createSalesOrder(order: InsertSalesOrder): Promise<SalesOrder>;
   updateSalesOrder(id: string, updates: Partial<SalesOrder>): Promise<SalesOrder | undefined>;
   deleteSalesOrder(id: string): Promise<boolean>;
+  getSalesOrderLines(salesOrderId: string): Promise<SalesOrderLine[]>;
   
   // Purchase Orders (company-scoped)
   getPurchaseOrders(companyId: string): Promise<PurchaseOrder[]>;
@@ -146,6 +147,7 @@ export interface IStorage {
   createPurchaseOrder(order: InsertPurchaseOrder): Promise<PurchaseOrder>;
   updatePurchaseOrder(id: string, updates: Partial<PurchaseOrder>): Promise<PurchaseOrder | undefined>;
   deletePurchaseOrder(id: string): Promise<boolean>;
+  getPurchaseOrderLines(purchaseOrderId: string): Promise<PurchaseOrderLine[]>;
   
   // Intercompany Transfers
   getIntercompanyTransfers(companyId: string): Promise<IntercompanyTransfer[]>;
