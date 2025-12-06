@@ -20,22 +20,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Download, Eye, Edit, Trash2, Users, Loader2 } from "lucide-react";
+import { Plus, Download, Eye, Edit, Trash2, Building2, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Customer } from "@shared/schema";
+import type { Vendor } from "@shared/schema";
 
-export function CustomerList() {
+export function VendorList() {
   const { activeCompany } = useAuth();
   const { toast } = useToast();
   const companyId = activeCompany?.id;
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
+  const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
 
   const [formData, setFormData] = useState({
     code: "",
@@ -50,79 +50,77 @@ export function CustomerList() {
     country: "",
     postalCode: "",
     paymentTerms: 30,
-    creditLimit: "0",
-    customerType: "regular",
+    vendorType: "regular",
   });
 
-  const { data: customers = [], isLoading } = useQuery<Customer[]>({
-    queryKey: ["/api/companies", companyId, "customers"],
+  const { data: vendors = [], isLoading } = useQuery<Vendor[]>({
+    queryKey: ["/api/companies", companyId, "vendors"],
     enabled: !!companyId,
   });
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const response = await apiRequest("POST", `/api/companies/${companyId}/customers`, data);
+      const response = await apiRequest("POST", `/api/companies/${companyId}/vendors`, data);
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "customers"] });
-      toast({ title: "Customer created successfully" });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "vendors"] });
+      toast({ title: "Vendor created successfully" });
       setIsFormOpen(false);
     },
     onError: () => {
-      toast({ title: "Failed to create customer", variant: "destructive" });
+      toast({ title: "Failed to create vendor", variant: "destructive" });
     },
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<Customer> }) => {
-      const response = await apiRequest("PATCH", `/api/companies/${companyId}/customers/${id}`, data);
+    mutationFn: async ({ id, data }: { id: string; data: Partial<Vendor> }) => {
+      const response = await apiRequest("PATCH", `/api/companies/${companyId}/vendors/${id}`, data);
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "customers"] });
-      toast({ title: "Customer updated successfully" });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "vendors"] });
+      toast({ title: "Vendor updated successfully" });
       setIsFormOpen(false);
     },
     onError: () => {
-      toast({ title: "Failed to update customer", variant: "destructive" });
+      toast({ title: "Failed to update vendor", variant: "destructive" });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/companies/${companyId}/customers/${id}`);
+      await apiRequest("DELETE", `/api/companies/${companyId}/vendors/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "customers"] });
-      toast({ title: "Customer deleted successfully" });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "vendors"] });
+      toast({ title: "Vendor deleted successfully" });
     },
     onError: () => {
-      toast({ title: "Failed to delete customer", variant: "destructive" });
+      toast({ title: "Failed to delete vendor", variant: "destructive" });
     },
   });
 
-  const handleOpenForm = (customer?: Customer) => {
-    if (customer) {
-      setEditingCustomer(customer);
+  const handleOpenForm = (vendor?: Vendor) => {
+    if (vendor) {
+      setEditingVendor(vendor);
       setFormData({
-        code: customer.code,
-        name: customer.name,
-        legalName: customer.legalName || "",
-        email: customer.email || "",
-        phone: customer.phone || "",
-        taxId: customer.taxId || "",
-        address: customer.address || "",
-        city: customer.city || "",
-        state: customer.state || "",
-        country: customer.country || "",
-        postalCode: customer.postalCode || "",
-        paymentTerms: customer.paymentTerms || 30,
-        creditLimit: customer.creditLimit || "0",
-        customerType: customer.customerType || "regular",
+        code: vendor.code,
+        name: vendor.name,
+        legalName: vendor.legalName || "",
+        email: vendor.email || "",
+        phone: vendor.phone || "",
+        taxId: vendor.taxId || "",
+        address: vendor.address || "",
+        city: vendor.city || "",
+        state: vendor.state || "",
+        country: vendor.country || "",
+        postalCode: vendor.postalCode || "",
+        paymentTerms: vendor.paymentTerms || 30,
+        vendorType: vendor.vendorType || "regular",
       });
     } else {
-      setEditingCustomer(null);
+      setEditingVendor(null);
       setFormData({
         code: "",
         name: "",
@@ -136,8 +134,7 @@ export function CustomerList() {
         country: "",
         postalCode: "",
         paymentTerms: 30,
-        creditLimit: "0",
-        customerType: "regular",
+        vendorType: "regular",
       });
     }
     setIsFormOpen(true);
@@ -145,25 +142,25 @@ export function CustomerList() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingCustomer) {
-      updateMutation.mutate({ id: editingCustomer.id, data: formData });
+    if (editingVendor) {
+      updateMutation.mutate({ id: editingVendor.id, data: formData });
     } else {
       createMutation.mutate(formData);
     }
   };
 
-  const handleViewCustomer = (customer: Customer) => {
-    setSelectedCustomer(customer);
+  const handleViewVendor = (vendor: Vendor) => {
+    setSelectedVendor(vendor);
     setIsDetailOpen(true);
   };
 
-  const handleDelete = (customerId: string) => {
-    if (confirm("Are you sure you want to delete this customer?")) {
-      deleteMutation.mutate(customerId);
+  const handleDelete = (vendorId: string) => {
+    if (confirm("Are you sure you want to delete this vendor?")) {
+      deleteMutation.mutate(vendorId);
     }
   };
 
-  const columns: Column<Customer>[] = [
+  const columns: Column<Vendor>[] = [
     { key: "code", header: "Code", sortable: true },
     { key: "name", header: "Name", sortable: true },
     { key: "email", header: "Email", sortable: true },
@@ -171,10 +168,10 @@ export function CustomerList() {
     { key: "city", header: "City" },
     { key: "country", header: "Country" },
     {
-      key: "customerType",
+      key: "vendorType",
       header: "Type",
       render: (item) => (
-        <span className="capitalize">{item.customerType || "regular"}</span>
+        <span className="capitalize">{item.vendorType || "regular"}</span>
       ),
     },
     {
@@ -190,7 +187,7 @@ export function CustomerList() {
       className: "text-right",
       render: (item) => (
         <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-          <Button variant="ghost" size="icon" onClick={() => handleViewCustomer(item)} data-testid={`button-view-${item.id}`}>
+          <Button variant="ghost" size="icon" onClick={() => handleViewVendor(item)} data-testid={`button-view-${item.id}`}>
             <Eye className="h-4 w-4" />
           </Button>
           <Button variant="ghost" size="icon" onClick={() => handleOpenForm(item)} data-testid={`button-edit-${item.id}`}>
@@ -215,87 +212,87 @@ export function CustomerList() {
   return (
     <div>
       <PageHeader
-        title="Customers"
-        description={`${customers.length} customer${customers.length !== 1 ? "s" : ""}`}
+        title="Vendors"
+        description={`${vendors.length} vendor${vendors.length !== 1 ? "s" : ""}`}
         actions={
           <>
             <Button variant="outline" data-testid="button-export">
               <Download className="h-4 w-4 mr-2" />
               Export
             </Button>
-            <Button onClick={() => handleOpenForm()} data-testid="button-new-customer">
+            <Button onClick={() => handleOpenForm()} data-testid="button-new-vendor">
               <Plus className="h-4 w-4 mr-2" />
-              New Customer
+              New Vendor
             </Button>
           </>
         }
       />
 
-      {customers.length === 0 ? (
+      {vendors.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <Users className="h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium mb-2">No customers yet</h3>
-          <p className="text-muted-foreground mb-4">Create your first customer to start tracking sales.</p>
-          <Button onClick={() => handleOpenForm()} data-testid="button-create-first-customer">
+          <Building2 className="h-12 w-12 text-muted-foreground mb-4" />
+          <h3 className="text-lg font-medium mb-2">No vendors yet</h3>
+          <p className="text-muted-foreground mb-4">Create your first vendor to start managing suppliers.</p>
+          <Button onClick={() => handleOpenForm()} data-testid="button-create-first-vendor">
             <Plus className="h-4 w-4 mr-2" />
-            Create Customer
+            Create Vendor
           </Button>
         </div>
       ) : (
         <DataTable
-          data={customers}
+          data={vendors}
           columns={columns}
           searchKey="name"
-          searchPlaceholder="Search customers..."
-          onRowClick={handleViewCustomer}
+          searchPlaceholder="Search vendors..."
+          onRowClick={handleViewVendor}
         />
       )}
 
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingCustomer ? "Edit Customer" : "New Customer"}</DialogTitle>
+            <DialogTitle>{editingVendor ? "Edit Vendor" : "New Vendor"}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="code">Customer Code</Label>
+                <Label htmlFor="code">Vendor Code</Label>
                 <Input
                   id="code"
                   value={formData.code}
                   onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                  placeholder="CUST-001"
+                  placeholder="VEND-001"
                   required
-                  data-testid="input-customer-code"
+                  data-testid="input-vendor-code"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="customerType">Type</Label>
+                <Label htmlFor="vendorType">Type</Label>
                 <Select
-                  value={formData.customerType}
-                  onValueChange={(value) => setFormData({ ...formData, customerType: value })}
+                  value={formData.vendorType}
+                  onValueChange={(value) => setFormData({ ...formData, vendorType: value })}
                 >
-                  <SelectTrigger data-testid="select-customer-type">
+                  <SelectTrigger data-testid="select-vendor-type">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="regular">Regular</SelectItem>
-                    <SelectItem value="wholesale">Wholesale</SelectItem>
-                    <SelectItem value="retail">Retail</SelectItem>
-                    <SelectItem value="corporate">Corporate</SelectItem>
+                    <SelectItem value="manufacturer">Manufacturer</SelectItem>
+                    <SelectItem value="distributor">Distributor</SelectItem>
+                    <SelectItem value="service">Service Provider</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="name">Customer Name</Label>
+              <Label htmlFor="name">Vendor Name</Label>
               <Input
                 id="name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Customer name"
+                placeholder="Vendor name"
                 required
-                data-testid="input-customer-name"
+                data-testid="input-vendor-name"
               />
             </div>
             <div className="space-y-2">
@@ -305,7 +302,7 @@ export function CustomerList() {
                 value={formData.legalName}
                 onChange={(e) => setFormData({ ...formData, legalName: e.target.value })}
                 placeholder="Legal entity name (optional)"
-                data-testid="input-customer-legal-name"
+                data-testid="input-vendor-legal-name"
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -317,7 +314,7 @@ export function CustomerList() {
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   placeholder="email@example.com"
-                  data-testid="input-customer-email"
+                  data-testid="input-vendor-email"
                 />
               </div>
               <div className="space-y-2">
@@ -327,7 +324,7 @@ export function CustomerList() {
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                   placeholder="+1 (555) 000-0000"
-                  data-testid="input-customer-phone"
+                  data-testid="input-vendor-phone"
                 />
               </div>
             </div>
@@ -338,7 +335,7 @@ export function CustomerList() {
                 value={formData.taxId}
                 onChange={(e) => setFormData({ ...formData, taxId: e.target.value })}
                 placeholder="Tax identification number"
-                data-testid="input-customer-tax-id"
+                data-testid="input-vendor-tax-id"
               />
             </div>
             <div className="space-y-2">
@@ -349,7 +346,7 @@ export function CustomerList() {
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                 placeholder="Street address"
                 rows={2}
-                data-testid="input-customer-address"
+                data-testid="input-vendor-address"
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -360,7 +357,7 @@ export function CustomerList() {
                   value={formData.city}
                   onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                   placeholder="City"
-                  data-testid="input-customer-city"
+                  data-testid="input-vendor-city"
                 />
               </div>
               <div className="space-y-2">
@@ -370,7 +367,7 @@ export function CustomerList() {
                   value={formData.state}
                   onChange={(e) => setFormData({ ...formData, state: e.target.value })}
                   placeholder="State"
-                  data-testid="input-customer-state"
+                  data-testid="input-vendor-state"
                 />
               </div>
             </div>
@@ -383,7 +380,7 @@ export function CustomerList() {
                   onChange={(e) => setFormData({ ...formData, country: e.target.value })}
                   placeholder="US"
                   maxLength={2}
-                  data-testid="input-customer-country"
+                  data-testid="input-vendor-country"
                 />
               </div>
               <div className="space-y-2">
@@ -393,34 +390,20 @@ export function CustomerList() {
                   value={formData.postalCode}
                   onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
                   placeholder="12345"
-                  data-testid="input-customer-postal-code"
+                  data-testid="input-vendor-postal-code"
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="paymentTerms">Payment Terms (days)</Label>
-                <Input
-                  id="paymentTerms"
-                  type="number"
-                  min="0"
-                  value={formData.paymentTerms}
-                  onChange={(e) => setFormData({ ...formData, paymentTerms: parseInt(e.target.value) || 0 })}
-                  data-testid="input-customer-payment-terms"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="creditLimit">Credit Limit</Label>
-                <Input
-                  id="creditLimit"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formData.creditLimit}
-                  onChange={(e) => setFormData({ ...formData, creditLimit: e.target.value })}
-                  data-testid="input-customer-credit-limit"
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="paymentTerms">Payment Terms (days)</Label>
+              <Input
+                id="paymentTerms"
+                type="number"
+                min="0"
+                value={formData.paymentTerms}
+                onChange={(e) => setFormData({ ...formData, paymentTerms: parseInt(e.target.value) || 0 })}
+                data-testid="input-vendor-payment-terms"
+              />
             </div>
             <div className="flex justify-end gap-2 pt-4">
               <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)} data-testid="button-cancel">
@@ -429,12 +412,12 @@ export function CustomerList() {
               <Button 
                 type="submit" 
                 disabled={createMutation.isPending || updateMutation.isPending}
-                data-testid="button-save-customer"
+                data-testid="button-save-vendor"
               >
                 {(createMutation.isPending || updateMutation.isPending) && (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 )}
-                {editingCustomer ? "Update" : "Create"}
+                {editingVendor ? "Update" : "Create"}
               </Button>
             </div>
           </form>
@@ -444,70 +427,64 @@ export function CustomerList() {
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Customer Details</DialogTitle>
+            <DialogTitle>Vendor Details</DialogTitle>
           </DialogHeader>
-          {selectedCustomer && (
+          {selectedVendor && (
             <div className="space-y-4">
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">{selectedCustomer.name}</CardTitle>
+                  <CardTitle className="text-lg">{selectedVendor.name}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Code</span>
-                    <span className="font-medium">{selectedCustomer.code}</span>
+                    <span className="font-medium">{selectedVendor.code}</span>
                   </div>
-                  {selectedCustomer.legalName && (
+                  {selectedVendor.legalName && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Legal Name</span>
-                      <span className="font-medium">{selectedCustomer.legalName}</span>
+                      <span className="font-medium">{selectedVendor.legalName}</span>
                     </div>
                   )}
-                  {selectedCustomer.email && (
+                  {selectedVendor.email && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Email</span>
-                      <span className="font-medium">{selectedCustomer.email}</span>
+                      <span className="font-medium">{selectedVendor.email}</span>
                     </div>
                   )}
-                  {selectedCustomer.phone && (
+                  {selectedVendor.phone && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Phone</span>
-                      <span className="font-medium">{selectedCustomer.phone}</span>
+                      <span className="font-medium">{selectedVendor.phone}</span>
                     </div>
                   )}
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Type</span>
-                    <span className="font-medium capitalize">{selectedCustomer.customerType || "regular"}</span>
+                    <span className="font-medium capitalize">{selectedVendor.vendorType || "regular"}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Payment Terms</span>
-                    <span className="font-medium">{selectedCustomer.paymentTerms || 30} days</span>
+                    <span className="font-medium">{selectedVendor.paymentTerms || 30} days</span>
                   </div>
-                  {selectedCustomer.creditLimit && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Credit Limit</span>
-                      <span className="font-medium">${parseFloat(selectedCustomer.creditLimit).toLocaleString()}</span>
-                    </div>
-                  )}
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Status</span>
-                    <StatusBadge status={selectedCustomer.isActive ? "active" : "inactive"} />
+                    <StatusBadge status={selectedVendor.isActive ? "active" : "inactive"} />
                   </div>
                 </CardContent>
               </Card>
-              {(selectedCustomer.address || selectedCustomer.city) && (
+              {(selectedVendor.address || selectedVendor.city) && (
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm">Address</CardTitle>
                   </CardHeader>
                   <CardContent className="text-sm text-muted-foreground">
-                    {selectedCustomer.address && <div>{selectedCustomer.address}</div>}
+                    {selectedVendor.address && <div>{selectedVendor.address}</div>}
                     <div>
-                      {[selectedCustomer.city, selectedCustomer.state, selectedCustomer.postalCode]
+                      {[selectedVendor.city, selectedVendor.state, selectedVendor.postalCode]
                         .filter(Boolean)
                         .join(", ")}
                     </div>
-                    {selectedCustomer.country && <div>{selectedCustomer.country}</div>}
+                    {selectedVendor.country && <div>{selectedVendor.country}</div>}
                   </CardContent>
                 </Card>
               )}

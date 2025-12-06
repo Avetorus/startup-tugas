@@ -32,9 +32,11 @@ import { DeliveryList } from "@/components/sales/DeliveryList";
 import { InvoiceList } from "@/components/sales/InvoiceList";
 import { ProductList } from "@/components/warehouse/ProductList";
 import { LocationList } from "@/components/warehouse/LocationList";
+import { WarehouseList } from "@/components/warehouse/WarehouseList";
 import { StockLevels } from "@/components/warehouse/StockLevels";
 import { MovementList } from "@/components/warehouse/MovementList";
 import { PurchaseOrderList } from "@/components/warehouse/PurchaseOrderList";
+import { VendorList } from "@/components/warehouse/VendorList";
 import { JournalEntries } from "@/components/financials/JournalEntries";
 import { ChartOfAccounts } from "@/components/financials/ChartOfAccounts";
 import { AccountsReceivable } from "@/components/financials/AccountsReceivable";
@@ -97,10 +99,12 @@ function ProtectedRoutes() {
       <Route path="/sales/invoices" component={InvoiceList} />
       
       <Route path="/warehouse/products" component={ProductList} />
+      <Route path="/warehouse/warehouses" component={WarehouseList} />
       <Route path="/warehouse/locations" component={LocationList} />
       <Route path="/warehouse/stock" component={StockLevels} />
       <Route path="/warehouse/movements" component={MovementList} />
       <Route path="/warehouse/purchase-orders" component={PurchaseOrderList} />
+      <Route path="/warehouse/vendors" component={VendorList} />
       
       <Route path="/financials/journal" component={JournalEntries} />
       <Route path="/financials/accounts" component={ChartOfAccounts} />

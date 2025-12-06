@@ -11,6 +11,8 @@ import {
   insertVendorSchema,
   insertTaxSchema,
   insertFiscalPeriodSchema,
+  insertSalesOrderSchema,
+  insertPurchaseOrderSchema,
   loginSchema,
   type CompanyContext,
   type Account,
@@ -835,6 +837,38 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/companies/:companyId/warehouses/:warehouseId", async (req: CompanyRequest, res) => {
+    try {
+      const warehouse = await storage.getWarehouse(req.params.warehouseId);
+      if (!warehouse) {
+        return res.status(404).json({ error: "Warehouse not found" });
+      }
+      if (warehouse.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Warehouse does not belong to this company" });
+      }
+      const updated = await storage.updateWarehouse(req.params.warehouseId, req.body);
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update warehouse" });
+    }
+  });
+
+  app.delete("/api/companies/:companyId/warehouses/:warehouseId", async (req: CompanyRequest, res) => {
+    try {
+      const warehouse = await storage.getWarehouse(req.params.warehouseId);
+      if (!warehouse) {
+        return res.status(404).json({ error: "Warehouse not found" });
+      }
+      if (warehouse.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Warehouse does not belong to this company" });
+      }
+      await storage.deleteWarehouse(req.params.warehouseId);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete warehouse" });
+    }
+  });
+
   // Products
   app.get("/api/companies/:companyId/products", async (req: CompanyRequest, res) => {
     try {
@@ -858,6 +892,38 @@ export async function registerRoutes(
         return res.status(400).json({ error: error.errors });
       }
       res.status(500).json({ error: "Failed to create product" });
+    }
+  });
+
+  app.patch("/api/companies/:companyId/products/:productId", async (req: CompanyRequest, res) => {
+    try {
+      const product = await storage.getProduct(req.params.productId);
+      if (!product) {
+        return res.status(404).json({ error: "Product not found" });
+      }
+      if (product.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Product does not belong to this company" });
+      }
+      const updated = await storage.updateProduct(req.params.productId, req.body);
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update product" });
+    }
+  });
+
+  app.delete("/api/companies/:companyId/products/:productId", async (req: CompanyRequest, res) => {
+    try {
+      const product = await storage.getProduct(req.params.productId);
+      if (!product) {
+        return res.status(404).json({ error: "Product not found" });
+      }
+      if (product.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Product does not belong to this company" });
+      }
+      await storage.deleteProduct(req.params.productId);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete product" });
     }
   });
 
@@ -887,6 +953,38 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/companies/:companyId/customers/:customerId", async (req: CompanyRequest, res) => {
+    try {
+      const customer = await storage.getCustomer(req.params.customerId);
+      if (!customer) {
+        return res.status(404).json({ error: "Customer not found" });
+      }
+      if (customer.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Customer does not belong to this company" });
+      }
+      const updated = await storage.updateCustomer(req.params.customerId, req.body);
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update customer" });
+    }
+  });
+
+  app.delete("/api/companies/:companyId/customers/:customerId", async (req: CompanyRequest, res) => {
+    try {
+      const customer = await storage.getCustomer(req.params.customerId);
+      if (!customer) {
+        return res.status(404).json({ error: "Customer not found" });
+      }
+      if (customer.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Customer does not belong to this company" });
+      }
+      await storage.deleteCustomer(req.params.customerId);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete customer" });
+    }
+  });
+
   // Vendors
   app.get("/api/companies/:companyId/vendors", async (req: CompanyRequest, res) => {
     try {
@@ -913,6 +1011,38 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/companies/:companyId/vendors/:vendorId", async (req: CompanyRequest, res) => {
+    try {
+      const vendor = await storage.getVendor(req.params.vendorId);
+      if (!vendor) {
+        return res.status(404).json({ error: "Vendor not found" });
+      }
+      if (vendor.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Vendor does not belong to this company" });
+      }
+      const updated = await storage.updateVendor(req.params.vendorId, req.body);
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update vendor" });
+    }
+  });
+
+  app.delete("/api/companies/:companyId/vendors/:vendorId", async (req: CompanyRequest, res) => {
+    try {
+      const vendor = await storage.getVendor(req.params.vendorId);
+      if (!vendor) {
+        return res.status(404).json({ error: "Vendor not found" });
+      }
+      if (vendor.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Vendor does not belong to this company" });
+      }
+      await storage.deleteVendor(req.params.vendorId);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete vendor" });
+    }
+  });
+
   // Taxes
   app.get("/api/companies/:companyId/taxes", async (req: CompanyRequest, res) => {
     try {
@@ -936,6 +1066,38 @@ export async function registerRoutes(
         return res.status(400).json({ error: error.errors });
       }
       res.status(500).json({ error: "Failed to create tax" });
+    }
+  });
+
+  app.patch("/api/companies/:companyId/taxes/:taxId", async (req: CompanyRequest, res) => {
+    try {
+      const tax = await storage.getTax(req.params.taxId);
+      if (!tax) {
+        return res.status(404).json({ error: "Tax not found" });
+      }
+      if (tax.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Tax belongs to different company" });
+      }
+      const updated = await storage.updateTax(req.params.taxId, req.body);
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update tax" });
+    }
+  });
+
+  app.delete("/api/companies/:companyId/taxes/:taxId", async (req: CompanyRequest, res) => {
+    try {
+      const tax = await storage.getTax(req.params.taxId);
+      if (!tax) {
+        return res.status(404).json({ error: "Tax not found" });
+      }
+      if (tax.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Tax belongs to different company" });
+      }
+      await storage.deleteTax(req.params.taxId);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete tax" });
     }
   });
 
@@ -979,6 +1141,54 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/companies/:companyId/sales-orders", async (req: CompanyRequest, res) => {
+    try {
+      const parsed = insertSalesOrderSchema.parse({
+        ...req.body,
+        companyId: req.params.companyId,
+      });
+      const order = await storage.createSalesOrder(parsed);
+      res.status(201).json(order);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create sales order" });
+    }
+  });
+
+  app.patch("/api/companies/:companyId/sales-orders/:orderId", async (req: CompanyRequest, res) => {
+    try {
+      const order = await storage.getSalesOrder(req.params.orderId);
+      if (!order) {
+        return res.status(404).json({ error: "Sales order not found" });
+      }
+      if (order.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Order belongs to different company" });
+      }
+      const updated = await storage.updateSalesOrder(req.params.orderId, req.body);
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update sales order" });
+    }
+  });
+
+  app.delete("/api/companies/:companyId/sales-orders/:orderId", async (req: CompanyRequest, res) => {
+    try {
+      const order = await storage.getSalesOrder(req.params.orderId);
+      if (!order) {
+        return res.status(404).json({ error: "Sales order not found" });
+      }
+      if (order.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Order belongs to different company" });
+      }
+      await storage.deleteSalesOrder(req.params.orderId);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete sales order" });
+    }
+  });
+
   // Purchase Orders
   app.get("/api/companies/:companyId/purchase-orders", async (req: CompanyRequest, res) => {
     try {
@@ -986,6 +1196,54 @@ export async function registerRoutes(
       res.json(orders);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch purchase orders" });
+    }
+  });
+
+  app.post("/api/companies/:companyId/purchase-orders", async (req: CompanyRequest, res) => {
+    try {
+      const parsed = insertPurchaseOrderSchema.parse({
+        ...req.body,
+        companyId: req.params.companyId,
+      });
+      const order = await storage.createPurchaseOrder(parsed);
+      res.status(201).json(order);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create purchase order" });
+    }
+  });
+
+  app.patch("/api/companies/:companyId/purchase-orders/:orderId", async (req: CompanyRequest, res) => {
+    try {
+      const order = await storage.getPurchaseOrder(req.params.orderId);
+      if (!order) {
+        return res.status(404).json({ error: "Purchase order not found" });
+      }
+      if (order.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Order belongs to different company" });
+      }
+      const updated = await storage.updatePurchaseOrder(req.params.orderId, req.body);
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update purchase order" });
+    }
+  });
+
+  app.delete("/api/companies/:companyId/purchase-orders/:orderId", async (req: CompanyRequest, res) => {
+    try {
+      const order = await storage.getPurchaseOrder(req.params.orderId);
+      if (!order) {
+        return res.status(404).json({ error: "Purchase order not found" });
+      }
+      if (order.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Order belongs to different company" });
+      }
+      await storage.deletePurchaseOrder(req.params.orderId);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete purchase order" });
     }
   });
 

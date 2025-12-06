@@ -84,6 +84,7 @@ export interface IStorage {
   getWarehouse(id: string): Promise<Warehouse | undefined>;
   createWarehouse(warehouse: InsertWarehouse): Promise<Warehouse>;
   updateWarehouse(id: string, updates: Partial<Warehouse>): Promise<Warehouse | undefined>;
+  deleteWarehouse(id: string): Promise<boolean>;
   
   // Products (company-scoped)
   getProducts(companyId: string): Promise<Product[]>;
@@ -91,35 +92,42 @@ export interface IStorage {
   getProductBySku(companyId: string, sku: string): Promise<Product | undefined>;
   createProduct(product: InsertProduct): Promise<Product>;
   updateProduct(id: string, updates: Partial<Product>): Promise<Product | undefined>;
+  deleteProduct(id: string): Promise<boolean>;
   
   // Customers (company-scoped)
   getCustomers(companyId: string): Promise<Customer[]>;
   getCustomer(id: string): Promise<Customer | undefined>;
   createCustomer(customer: InsertCustomer): Promise<Customer>;
   updateCustomer(id: string, updates: Partial<Customer>): Promise<Customer | undefined>;
+  deleteCustomer(id: string): Promise<boolean>;
   
   // Vendors (company-scoped)
   getVendors(companyId: string): Promise<Vendor[]>;
   getVendor(id: string): Promise<Vendor | undefined>;
   createVendor(vendor: InsertVendor): Promise<Vendor>;
   updateVendor(id: string, updates: Partial<Vendor>): Promise<Vendor | undefined>;
+  deleteVendor(id: string): Promise<boolean>;
   
   // Taxes (company-scoped)
   getTaxes(companyId: string): Promise<Tax[]>;
   getTax(id: string): Promise<Tax | undefined>;
   createTax(tax: InsertTax): Promise<Tax>;
+  updateTax(id: string, updates: Partial<Tax>): Promise<Tax | undefined>;
+  deleteTax(id: string): Promise<boolean>;
   
   // Sales Orders (company-scoped)
   getSalesOrders(companyId: string): Promise<SalesOrder[]>;
   getSalesOrder(id: string): Promise<SalesOrder | undefined>;
   createSalesOrder(order: InsertSalesOrder): Promise<SalesOrder>;
   updateSalesOrder(id: string, updates: Partial<SalesOrder>): Promise<SalesOrder | undefined>;
+  deleteSalesOrder(id: string): Promise<boolean>;
   
   // Purchase Orders (company-scoped)
   getPurchaseOrders(companyId: string): Promise<PurchaseOrder[]>;
   getPurchaseOrder(id: string): Promise<PurchaseOrder | undefined>;
   createPurchaseOrder(order: InsertPurchaseOrder): Promise<PurchaseOrder>;
   updatePurchaseOrder(id: string, updates: Partial<PurchaseOrder>): Promise<PurchaseOrder | undefined>;
+  deletePurchaseOrder(id: string): Promise<boolean>;
   
   // Intercompany Transfers
   getIntercompanyTransfers(companyId: string): Promise<IntercompanyTransfer[]>;
@@ -630,12 +638,14 @@ export class MemStorage implements IStorage {
         companyId: holdingCompany.id,
         code: "WH-MAIN",
         name: "Main Warehouse",
+        warehouseType: "standard",
         address: "123 Logistics Way",
         city: "Metropolis",
         state: "NY",
         country: "US",
-        postalCode: "10001",
+        managerId: null,
         isActive: true,
+        allowNegativeStock: false,
         createdAt: new Date(),
       },
       {
@@ -643,12 +653,14 @@ export class MemStorage implements IStorage {
         companyId: holdingCompany.id,
         code: "WH-DIST",
         name: "Distribution Center",
+        warehouseType: "standard",
         address: "456 Distribution Blvd",
         city: "Metropolis",
         state: "NY",
         country: "US",
-        postalCode: "10002",
+        managerId: null,
         isActive: true,
+        allowNegativeStock: false,
         createdAt: new Date(),
       },
     ];
@@ -1247,6 +1259,13 @@ export class MemStorage implements IStorage {
     return updated;
   }
 
+  async deleteWarehouse(id: string): Promise<boolean> {
+    const warehouse = this.warehouses.get(id);
+    if (!warehouse) return false;
+    this.warehouses.delete(id);
+    return true;
+  }
+
   // ===================== PRODUCTS =====================
   async getProducts(companyId: string): Promise<Product[]> {
     return Array.from(this.products.values()).filter(p => p.companyId === companyId);
@@ -1293,6 +1312,13 @@ export class MemStorage implements IStorage {
     const updated = { ...product, ...updates, updatedAt: new Date() };
     this.products.set(id, updated);
     return updated;
+  }
+
+  async deleteProduct(id: string): Promise<boolean> {
+    const product = this.products.get(id);
+    if (!product) return false;
+    this.products.delete(id);
+    return true;
   }
 
   // ===================== CUSTOMERS =====================
@@ -1342,6 +1368,13 @@ export class MemStorage implements IStorage {
     return updated;
   }
 
+  async deleteCustomer(id: string): Promise<boolean> {
+    const customer = this.customers.get(id);
+    if (!customer) return false;
+    this.customers.delete(id);
+    return true;
+  }
+
   // ===================== VENDORS =====================
   async getVendors(companyId: string): Promise<Vendor[]> {
     return Array.from(this.vendors.values()).filter(v => v.companyId === companyId);
@@ -1387,6 +1420,13 @@ export class MemStorage implements IStorage {
     return updated;
   }
 
+  async deleteVendor(id: string): Promise<boolean> {
+    const vendor = this.vendors.get(id);
+    if (!vendor) return false;
+    this.vendors.delete(id);
+    return true;
+  }
+
   // ===================== TAXES =====================
   async getTaxes(companyId: string): Promise<Tax[]> {
     return Array.from(this.taxes.values()).filter(t => t.companyId === companyId);
@@ -1412,6 +1452,21 @@ export class MemStorage implements IStorage {
     };
     this.taxes.set(id, newTax);
     return newTax;
+  }
+
+  async updateTax(id: string, updates: Partial<Tax>): Promise<Tax | undefined> {
+    const tax = this.taxes.get(id);
+    if (!tax) return undefined;
+    const updated = { ...tax, ...updates };
+    this.taxes.set(id, updated);
+    return updated;
+  }
+
+  async deleteTax(id: string): Promise<boolean> {
+    const tax = this.taxes.get(id);
+    if (!tax) return false;
+    this.taxes.delete(id);
+    return true;
   }
 
   // ===================== SALES ORDERS =====================
@@ -1458,6 +1513,13 @@ export class MemStorage implements IStorage {
     return updated;
   }
 
+  async deleteSalesOrder(id: string): Promise<boolean> {
+    const order = this.salesOrders.get(id);
+    if (!order) return false;
+    this.salesOrders.delete(id);
+    return true;
+  }
+
   // ===================== PURCHASE ORDERS =====================
   async getPurchaseOrders(companyId: string): Promise<PurchaseOrder[]> {
     return Array.from(this.purchaseOrders.values()).filter(o => o.companyId === companyId);
@@ -1500,6 +1562,13 @@ export class MemStorage implements IStorage {
     const updated = { ...order, ...updates, updatedAt: new Date() };
     this.purchaseOrders.set(id, updated);
     return updated;
+  }
+
+  async deletePurchaseOrder(id: string): Promise<boolean> {
+    const order = this.purchaseOrders.get(id);
+    if (!order) return false;
+    this.purchaseOrders.delete(id);
+    return true;
   }
 
   // ===================== INTERCOMPANY TRANSFERS =====================

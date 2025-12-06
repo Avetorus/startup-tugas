@@ -205,6 +205,12 @@ Dashboard shows onboarding checklist with tasks:
 - Review Settings
 
 ## Recent Changes
+- 2025-12-06: Converted all master data components to use real API data (Warehouses, Products, Customers, Vendors)
+- 2025-12-06: Added complete CRUD routes for Sales Orders (POST, PATCH, DELETE)
+- 2025-12-06: Added complete CRUD routes for Purchase Orders (POST, PATCH, DELETE)
+- 2025-12-06: Added PATCH/DELETE routes for Taxes with company scoping validation
+- 2025-12-06: Created VendorList component with TanStack Query integration
+- 2025-12-06: Added Warehouses navigation item to sidebar under Warehouse module
 - 2025-12-06: Enhanced setup wizard with dedicated URL routes (/setup/company, /setup/admin-user)
 - 2025-12-06: Added setup page locking to prevent reconfiguration after initialization
 - 2025-12-06: Implemented first-time setup wizard (company registration + admin creation)
@@ -221,3 +227,24 @@ Dashboard shows onboarding checklist with tasks:
 - 2025-12-05: Created Consolidation Reports module (trial balance, eliminations, by entity)
 - 2025-12-05: Added session/context and session/switch-company endpoints
 - 2025-12-05: Implemented consolidation API endpoints for multi-company reporting
+
+## Implementation Status
+
+### Complete (Using Real API Data)
+- Chart of Accounts: Full CRUD with 3-level hierarchy
+- Warehouses: Full CRUD with type support (standard, transit, virtual)
+- Products: Full CRUD with inventory settings
+- Customers: Full CRUD with credit management
+- Vendors: Full CRUD with payment terms
+- Taxes: Full CRUD with rate configuration
+- Sales Orders: Full CRUD with company scoping
+- Purchase Orders: Full CRUD with company scoping
+
+### API Pattern
+All master data uses consistent company-scoped endpoints:
+- GET `/api/companies/:companyId/{entity}` - List all
+- POST `/api/companies/:companyId/{entity}` - Create new
+- PATCH `/api/companies/:companyId/{entity}/:id` - Update existing
+- DELETE `/api/companies/:companyId/{entity}/:id` - Delete
+
+All endpoints validate company ownership before mutations.

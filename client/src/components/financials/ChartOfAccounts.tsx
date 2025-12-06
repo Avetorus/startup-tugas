@@ -46,7 +46,7 @@ const accountTypeColors: Record<string, string> = {
 };
 
 export function ChartOfAccounts() {
-  const { activeCompany, getAuthHeaders } = useAuth();
+  const { activeCompany } = useAuth();
   const { toast } = useToast();
   const companyId = activeCompany?.id;
 
@@ -72,9 +72,7 @@ export function ChartOfAccounts() {
 
   const createMutation = useMutation({
     mutationFn: async (data: Omit<typeof formData, "parentId"> & { parentId: string | null }) => {
-      const response = await apiRequest("POST", `/api/companies/${companyId}/accounts`, data, {
-        headers: getAuthHeaders(),
-      });
+      const response = await apiRequest("POST", `/api/companies/${companyId}/accounts`, data);
       return response.json();
     },
     onSuccess: () => {
@@ -89,9 +87,7 @@ export function ChartOfAccounts() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<Account> }) => {
-      const response = await apiRequest("PATCH", `/api/companies/${companyId}/accounts/${id}`, data, {
-        headers: getAuthHeaders(),
-      });
+      const response = await apiRequest("PATCH", `/api/companies/${companyId}/accounts/${id}`, data);
       return response.json();
     },
     onSuccess: () => {
@@ -106,9 +102,7 @@ export function ChartOfAccounts() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/companies/${companyId}/accounts/${id}`, undefined, {
-        headers: getAuthHeaders(),
-      });
+      await apiRequest("DELETE", `/api/companies/${companyId}/accounts/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "accounts"] });

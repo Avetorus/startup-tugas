@@ -74,11 +74,13 @@ const menuGroups: MenuGroup[] = [
     label: "Warehouse",
     icon: Package,
     items: [
+      { title: "Warehouses", url: "/warehouse/warehouses", icon: Building2 },
       { title: "Products", url: "/warehouse/products", icon: Package },
       { title: "Locations", url: "/warehouse/locations", icon: MapPin },
       { title: "Stock Levels", url: "/warehouse/stock", icon: BarChart3 },
       { title: "Movements", url: "/warehouse/movements", icon: ArrowRightLeft },
       { title: "Purchase Orders", url: "/warehouse/purchase-orders", icon: ClipboardList },
+      { title: "Vendors", url: "/warehouse/vendors", icon: Building2 },
     ],
   },
   {
