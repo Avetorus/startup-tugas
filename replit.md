@@ -105,6 +105,9 @@ Unanza is a comprehensive multi-tenant enterprise ERP system with hierarchical m
 
 ### Company-Scoped Master Data
 - `GET /api/companies/:companyId/accounts` - Chart of Accounts
+- `POST /api/companies/:companyId/accounts` - Create account
+- `PATCH /api/companies/:companyId/accounts/:accountId` - Update account
+- `DELETE /api/companies/:companyId/accounts/:accountId` - Delete account
 - `GET /api/companies/:companyId/warehouses` - Warehouses
 - `GET /api/companies/:companyId/products` - Products
 - `GET /api/companies/:companyId/customers` - Customers
