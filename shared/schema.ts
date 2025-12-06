@@ -307,6 +307,33 @@ export const vendors = pgTable("vendors", {
   companyIdx: index("vendors_company_idx").on(table.companyId),
 }));
 
+// Employees (company-scoped)
+export const employees = pgTable("employees", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id),
+  employeeCode: varchar("employee_code", { length: 20 }).notNull(),
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: varchar("phone", { length: 30 }),
+  department: varchar("department", { length: 100 }),
+  position: varchar("position", { length: 100 }),
+  hireDate: timestamp("hire_date").defaultNow(),
+  terminationDate: timestamp("termination_date"),
+  status: varchar("status", { length: 20 }).default("active"),
+  managerId: varchar("manager_id"),
+  address: text("address"),
+  city: text("city"),
+  state: text("state"),
+  country: varchar("country", { length: 2 }),
+  salary: decimal("salary", { precision: 18, scale: 2 }),
+  salaryFrequency: varchar("salary_frequency", { length: 20 }).default("monthly"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  companyCodeUnique: unique().on(table.companyId, table.employeeCode),
+  companyIdx: index("employees_company_idx").on(table.companyId),
+}));
+
 // Tax configurations (company-scoped)
 export const taxes = pgTable("taxes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -634,6 +661,15 @@ export const insertVendorSchema = createInsertSchema(vendors).omit({
 });
 export type InsertVendor = z.infer<typeof insertVendorSchema>;
 export type Vendor = typeof vendors.$inferSelect;
+
+// Employee schemas
+export const insertEmployeeSchema = createInsertSchema(employees).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
+export type Employee = typeof employees.$inferSelect;
 
 // Tax schemas
 export const insertTaxSchema = createInsertSchema(taxes).omit({

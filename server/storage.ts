@@ -11,6 +11,7 @@ import {
   type Customer, type InsertCustomer,
   type Vendor, type InsertVendor,
   type Tax, type InsertTax,
+  type Employee, type InsertEmployee,
   type SalesOrder, type InsertSalesOrder,
   type PurchaseOrder, type InsertPurchaseOrder,
   type IntercompanyTransfer, type InsertIntercompanyTransfer,
@@ -115,6 +116,20 @@ export interface IStorage {
   updateTax(id: string, updates: Partial<Tax>): Promise<Tax | undefined>;
   deleteTax(id: string): Promise<boolean>;
   
+  // Employees (company-scoped)
+  getEmployees(companyId: string): Promise<Employee[]>;
+  getEmployee(id: string): Promise<Employee | undefined>;
+  createEmployee(employee: InsertEmployee): Promise<Employee>;
+  updateEmployee(id: string, updates: Partial<Employee>): Promise<Employee | undefined>;
+  deleteEmployee(id: string): Promise<boolean>;
+  
+  // Journal Entries (company-scoped)
+  getJournalEntries(companyId: string): Promise<JournalEntry[]>;
+  getJournalEntry(id: string): Promise<JournalEntry | undefined>;
+  createJournalEntry(entry: InsertJournalEntry): Promise<JournalEntry>;
+  updateJournalEntry(id: string, updates: Partial<JournalEntry>): Promise<JournalEntry | undefined>;
+  deleteJournalEntry(id: string): Promise<boolean>;
+  
   // Sales Orders (company-scoped)
   getSalesOrders(companyId: string): Promise<SalesOrder[]>;
   getSalesOrder(id: string): Promise<SalesOrder | undefined>;
@@ -176,6 +191,8 @@ export class MemStorage implements IStorage {
   private customers: Map<string, Customer>;
   private vendors: Map<string, Vendor>;
   private taxes: Map<string, Tax>;
+  private employees: Map<string, Employee>;
+  private journalEntries: Map<string, JournalEntry>;
   private salesOrders: Map<string, SalesOrder>;
   private purchaseOrders: Map<string, PurchaseOrder>;
   private intercompanyTransfers: Map<string, IntercompanyTransfer>;
@@ -196,6 +213,7 @@ export class MemStorage implements IStorage {
     this.customers = new Map();
     this.vendors = new Map();
     this.taxes = new Map();
+    this.employees = new Map();
     this.salesOrders = new Map();
     this.purchaseOrders = new Map();
     this.intercompanyTransfers = new Map();
@@ -1466,6 +1484,58 @@ export class MemStorage implements IStorage {
     const tax = this.taxes.get(id);
     if (!tax) return false;
     this.taxes.delete(id);
+    return true;
+  }
+
+  // ===================== EMPLOYEES =====================
+  async getEmployees(companyId: string): Promise<Employee[]> {
+    return Array.from(this.employees.values()).filter(e => e.companyId === companyId);
+  }
+
+  async getEmployee(id: string): Promise<Employee | undefined> {
+    return this.employees.get(id);
+  }
+
+  async createEmployee(employee: InsertEmployee): Promise<Employee> {
+    const id = randomUUID();
+    const newEmployee: Employee = {
+      id,
+      companyId: employee.companyId,
+      employeeCode: employee.employeeCode,
+      name: employee.name,
+      email: employee.email ?? null,
+      phone: employee.phone ?? null,
+      department: employee.department ?? null,
+      position: employee.position ?? null,
+      hireDate: employee.hireDate ?? new Date(),
+      terminationDate: employee.terminationDate ?? null,
+      status: employee.status ?? "active",
+      managerId: employee.managerId ?? null,
+      address: employee.address ?? null,
+      city: employee.city ?? null,
+      state: employee.state ?? null,
+      country: employee.country ?? null,
+      salary: employee.salary ?? null,
+      salaryFrequency: employee.salaryFrequency ?? "monthly",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.employees.set(id, newEmployee);
+    return newEmployee;
+  }
+
+  async updateEmployee(id: string, updates: Partial<Employee>): Promise<Employee | undefined> {
+    const employee = this.employees.get(id);
+    if (!employee) return undefined;
+    const updated = { ...employee, ...updates, updatedAt: new Date() };
+    this.employees.set(id, updated);
+    return updated;
+  }
+
+  async deleteEmployee(id: string): Promise<boolean> {
+    const employee = this.employees.get(id);
+    if (!employee) return false;
+    this.employees.delete(id);
     return true;
   }
 

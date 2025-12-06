@@ -10,6 +10,7 @@ import {
   insertCustomerSchema,
   insertVendorSchema,
   insertTaxSchema,
+  insertEmployeeSchema,
   insertFiscalPeriodSchema,
   insertSalesOrderSchema,
   insertPurchaseOrderSchema,
@@ -1098,6 +1099,64 @@ export async function registerRoutes(
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete tax" });
+    }
+  });
+
+  // Employees
+  app.get("/api/companies/:companyId/employees", async (req: CompanyRequest, res) => {
+    try {
+      const employees = await storage.getEmployees(req.params.companyId);
+      res.json(employees);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch employees" });
+    }
+  });
+
+  app.post("/api/companies/:companyId/employees", async (req: CompanyRequest, res) => {
+    try {
+      const parsed = insertEmployeeSchema.parse({
+        ...req.body,
+        companyId: req.params.companyId,
+      });
+      const employee = await storage.createEmployee(parsed);
+      res.status(201).json(employee);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create employee" });
+    }
+  });
+
+  app.patch("/api/companies/:companyId/employees/:employeeId", async (req: CompanyRequest, res) => {
+    try {
+      const employee = await storage.getEmployee(req.params.employeeId);
+      if (!employee) {
+        return res.status(404).json({ error: "Employee not found" });
+      }
+      if (employee.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Employee belongs to different company" });
+      }
+      const updated = await storage.updateEmployee(req.params.employeeId, req.body);
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update employee" });
+    }
+  });
+
+  app.delete("/api/companies/:companyId/employees/:employeeId", async (req: CompanyRequest, res) => {
+    try {
+      const employee = await storage.getEmployee(req.params.employeeId);
+      if (!employee) {
+        return res.status(404).json({ error: "Employee not found" });
+      }
+      if (employee.companyId !== req.params.companyId) {
+        return res.status(403).json({ error: "Employee belongs to different company" });
+      }
+      await storage.deleteEmployee(req.params.employeeId);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete employee" });
     }
   });
 

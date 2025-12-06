@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { DataTable, type Column } from "@/components/layout/DataTable";
 import { StatusBadge } from "@/components/layout/StatusBadge";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -7,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -20,10 +22,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Download, Eye, Edit, Trash2, Send, PackageCheck } from "lucide-react";
-import { mockPurchaseOrders, mockVendors, mockProducts } from "@/lib/mockData";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Plus, Download, Eye, Trash2, Send, PackageCheck } from "lucide-react";
+import { useCompany } from "@/contexts/CompanyContext";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import type { PurchaseOrder, Vendor, Product, InsertPurchaseOrder } from "@shared/schema";
 
-type PurchaseOrder = typeof mockPurchaseOrders[0];
+interface PurchaseOrderDisplay extends PurchaseOrder {
+  vendorName: string;
+}
 
 const poSteps = [
   { id: "draft", label: "Draft" },
@@ -31,72 +39,135 @@ const poSteps = [
   { id: "received", label: "Received" },
 ];
 
-// todo: remove mock functionality
-const mockPOLines = [
-  { productName: "Industrial Widget A", quantity: 100, unitCost: 35.00, total: 3500.00 },
-  { productName: "Component Alpha", quantity: 200, unitCost: 18.50, total: 3700.00 },
-];
-
 export function PurchaseOrderList() {
-  const [orders, setOrders] = useState(mockPurchaseOrders);
-  const [selectedOrder, setSelectedOrder] = useState<PurchaseOrder | null>(null);
+  const { activeCompany } = useCompany();
+  const { toast } = useToast();
+  const [selectedOrder, setSelectedOrder] = useState<PurchaseOrderDisplay | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [formData, setFormData] = useState({ vendorId: "" });
 
-  const [formData, setFormData] = useState({
-    vendorId: "",
+  const { data: orders = [], isLoading: ordersLoading } = useQuery<PurchaseOrder[]>({
+    queryKey: ["/api/companies", activeCompany?.id, "purchase-orders"],
+    enabled: !!activeCompany?.id,
   });
 
-  const handleViewOrder = (order: PurchaseOrder) => {
+  const { data: vendors = [] } = useQuery<Vendor[]>({
+    queryKey: ["/api/companies", activeCompany?.id, "vendors"],
+    enabled: !!activeCompany?.id,
+  });
+
+  const { data: products = [] } = useQuery<Product[]>({
+    queryKey: ["/api/companies", activeCompany?.id, "products"],
+    enabled: !!activeCompany?.id,
+  });
+
+  const ordersWithVendors: PurchaseOrderDisplay[] = orders.map(order => ({
+    ...order,
+    vendorName: vendors.find(v => v.id === order.vendorId)?.name || "Unknown Vendor",
+  }));
+
+  const createMutation = useMutation({
+    mutationFn: async (data: Partial<InsertPurchaseOrder>) => {
+      const orderNumber = `PO-${String(Date.now()).slice(-6)}`;
+      return apiRequest("POST", `/api/companies/${activeCompany?.id}/purchase-orders`, {
+        ...data,
+        orderNumber,
+        companyId: activeCompany?.id,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "purchase-orders"] });
+      toast({ title: "Purchase order created successfully" });
+      setIsFormOpen(false);
+      setFormData({ vendorId: "" });
+    },
+    onError: () => {
+      toast({ title: "Failed to create purchase order", variant: "destructive" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<PurchaseOrder> }) => {
+      return apiRequest("PATCH", `/api/companies/${activeCompany?.id}/purchase-orders/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "purchase-orders"] });
+      toast({ title: "Purchase order updated successfully" });
+      setIsDetailOpen(false);
+    },
+    onError: () => {
+      toast({ title: "Failed to update purchase order", variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/companies/${activeCompany?.id}/purchase-orders/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "purchase-orders"] });
+      toast({ title: "Purchase order deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete purchase order", variant: "destructive" });
+    },
+  });
+
+  const handleViewOrder = (order: PurchaseOrderDisplay) => {
     setSelectedOrder(order);
     setIsDetailOpen(true);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // todo: remove mock functionality
-    const vendor = mockVendors.find(v => v.id === formData.vendorId);
-    const newOrder: PurchaseOrder = {
-      id: `PO-${String(orders.length + 1).padStart(3, "0")}`,
-      vendorId: formData.vendorId,
-      vendorName: vendor?.name || "",
-      date: new Date().toISOString().split("T")[0],
-      status: "draft",
-      total: 0,
-      items: 0,
-    };
-    setOrders([newOrder, ...orders]);
-    console.log("Created PO:", newOrder);
-    setIsFormOpen(false);
-    setFormData({ vendorId: "" });
+    if (!formData.vendorId) return;
+    createMutation.mutate({ vendorId: formData.vendorId });
   };
 
   const handleStatusChange = (orderId: string, newStatus: string) => {
-    setOrders(orders.map(o => 
-      o.id === orderId ? { ...o, status: newStatus } : o
-    ));
+    updateMutation.mutate({ id: orderId, data: { status: newStatus } });
     if (selectedOrder?.id === orderId) {
       setSelectedOrder({ ...selectedOrder, status: newStatus });
     }
-    console.log("PO status changed:", orderId, newStatus);
   };
 
   const handleDeleteOrder = (orderId: string) => {
-    setOrders(orders.filter(o => o.id !== orderId));
-    console.log("Deleted PO:", orderId);
+    deleteMutation.mutate(orderId);
   };
 
-  const getActionButton = (order: PurchaseOrder) => {
+  const handleExport = () => {
+    const csv = [
+      ["PO #", "Vendor", "Date", "Status", "Total"].join(","),
+      ...ordersWithVendors.map(o => [
+        o.orderNumber,
+        o.vendorName,
+        new Date(o.orderDate).toLocaleDateString(),
+        o.status,
+        o.total
+      ].join(","))
+    ].join("\n");
+    
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "purchase_orders.csv";
+    a.click();
+  };
+
+  const getActionButton = (order: PurchaseOrderDisplay) => {
     switch (order.status) {
       case "draft":
         return (
           <Button 
             size="sm" 
             onClick={(e) => { e.stopPropagation(); handleStatusChange(order.id, "ordered"); }}
+            disabled={updateMutation.isPending}
             data-testid={`button-send-${order.id}`}
           >
             <Send className="h-3 w-3 mr-1" />
-            Send
+            {updateMutation.isPending ? "..." : "Send"}
           </Button>
         );
       case "ordered":
@@ -104,10 +175,11 @@ export function PurchaseOrderList() {
           <Button 
             size="sm" 
             onClick={(e) => { e.stopPropagation(); handleStatusChange(order.id, "received"); }}
+            disabled={updateMutation.isPending}
             data-testid={`button-receive-${order.id}`}
           >
             <PackageCheck className="h-3 w-3 mr-1" />
-            Receive
+            {updateMutation.isPending ? "..." : "Receive"}
           </Button>
         );
       default:
@@ -115,22 +187,26 @@ export function PurchaseOrderList() {
     }
   };
 
-  const columns: Column<PurchaseOrder>[] = [
-    { key: "id", header: "PO #", sortable: true },
+  const columns: Column<PurchaseOrderDisplay>[] = [
+    { key: "orderNumber", header: "PO #", sortable: true },
     { key: "vendorName", header: "Vendor", sortable: true },
-    { key: "date", header: "Date", sortable: true },
+    { 
+      key: "orderDate", 
+      header: "Date", 
+      sortable: true,
+      render: (item) => new Date(item.orderDate).toLocaleDateString()
+    },
     { 
       key: "status", 
       header: "Status",
       render: (item) => <StatusBadge status={item.status as "draft" | "ordered" | "received"} />
     },
-    { key: "items", header: "Items", className: "text-center" },
     { 
       key: "total", 
       header: "Total", 
       sortable: true,
       className: "text-right",
-      render: (item) => `$${item.total.toLocaleString()}`
+      render: (item) => `$${parseFloat(item.total || "0").toLocaleString()}`
     },
     {
       key: "actions",
@@ -143,7 +219,13 @@ export function PurchaseOrderList() {
             <Eye className="h-4 w-4" />
           </Button>
           {item.status === "draft" && (
-            <Button variant="ghost" size="icon" onClick={() => handleDeleteOrder(item.id)} data-testid={`button-delete-${item.id}`}>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => handleDeleteOrder(item.id)} 
+              disabled={deleteMutation.isPending}
+              data-testid={`button-delete-${item.id}`}
+            >
               <Trash2 className="h-4 w-4" />
             </Button>
           )}
@@ -152,6 +234,19 @@ export function PurchaseOrderList() {
     },
   ];
 
+  if (ordersLoading) {
+    return (
+      <div className="space-y-4">
+        <PageHeader title="Purchase Orders" description="Manage supplier purchase orders" />
+        <div className="space-y-2">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-12 w-full" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader
@@ -159,7 +254,7 @@ export function PurchaseOrderList() {
         description="Manage supplier purchase orders"
         actions={
           <>
-            <Button variant="outline" data-testid="button-export">
+            <Button variant="outline" onClick={handleExport} data-testid="button-export">
               <Download className="h-4 w-4 mr-2" />
               Export
             </Button>
@@ -172,7 +267,7 @@ export function PurchaseOrderList() {
       />
 
       <DataTable
-        data={orders}
+        data={ordersWithVendors}
         columns={columns}
         searchKey="vendorName"
         searchPlaceholder="Search purchase orders..."
@@ -183,6 +278,9 @@ export function PurchaseOrderList() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>New Purchase Order</DialogTitle>
+            <DialogDescription>
+              Create a new purchase order by selecting a vendor.
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
@@ -195,7 +293,7 @@ export function PurchaseOrderList() {
                   <SelectValue placeholder="Select vendor" />
                 </SelectTrigger>
                 <SelectContent>
-                  {mockVendors.map((vendor) => (
+                  {vendors.map((vendor) => (
                     <SelectItem key={vendor.id} value={vendor.id}>
                       {vendor.name}
                     </SelectItem>
@@ -207,8 +305,8 @@ export function PurchaseOrderList() {
               <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)} data-testid="button-cancel">
                 Cancel
               </Button>
-              <Button type="submit" disabled={!formData.vendorId} data-testid="button-create-po">
-                Create PO
+              <Button type="submit" disabled={!formData.vendorId || createMutation.isPending} data-testid="button-create-po">
+                {createMutation.isPending ? "Creating..." : "Create PO"}
               </Button>
             </div>
           </form>
@@ -219,13 +317,16 @@ export function PurchaseOrderList() {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Purchase Order Details</DialogTitle>
+            <DialogDescription>
+              View and manage order {selectedOrder?.orderNumber}
+            </DialogDescription>
           </DialogHeader>
           {selectedOrder && (
             <div className="space-y-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-3">
-                    <h2 className="text-xl font-semibold" data-testid="text-po-id">{selectedOrder.id}</h2>
+                    <h2 className="text-xl font-semibold" data-testid="text-po-number">{selectedOrder.orderNumber}</h2>
                     <StatusBadge status={selectedOrder.status as "draft" | "ordered" | "received"} />
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">
@@ -235,7 +336,7 @@ export function PurchaseOrderList() {
                 {getActionButton(selectedOrder)}
               </div>
 
-              <WorkflowStepper steps={poSteps} currentStep={selectedOrder.status} />
+              <WorkflowStepper steps={poSteps} currentStep={selectedOrder.status || "draft"} />
 
               <div className="grid md:grid-cols-2 gap-4">
                 <Card>
@@ -243,18 +344,20 @@ export function PurchaseOrderList() {
                     <CardTitle className="text-base">Order Information</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm">
-                    <div className="flex justify-between">
+                    <div className="flex justify-between gap-2">
                       <span className="text-muted-foreground">Order Date</span>
-                      <span>{selectedOrder.date}</span>
+                      <span>{new Date(selectedOrder.orderDate).toLocaleDateString()}</span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex justify-between gap-2">
                       <span className="text-muted-foreground">Vendor ID</span>
                       <span>{selectedOrder.vendorId}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Items</span>
-                      <span>{selectedOrder.items}</span>
-                    </div>
+                    {selectedOrder.expectedDate && (
+                      <div className="flex justify-between gap-2">
+                        <span className="text-muted-foreground">Expected Date</span>
+                        <span>{new Date(selectedOrder.expectedDate).toLocaleDateString()}</span>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -263,37 +366,27 @@ export function PurchaseOrderList() {
                     <CardTitle className="text-base">Order Summary</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm">
-                    <div className="flex justify-between font-semibold">
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">Subtotal</span>
+                      <span>${parseFloat(selectedOrder.subtotal || "0").toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">Tax</span>
+                      <span>${parseFloat(selectedOrder.taxAmount || "0").toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between gap-2 font-semibold pt-2 border-t">
                       <span>Total</span>
-                      <span data-testid="text-po-total">${selectedOrder.total.toLocaleString()}</span>
+                      <span data-testid="text-po-total">${parseFloat(selectedOrder.total || "0").toLocaleString()}</span>
                     </div>
                   </CardContent>
                 </Card>
               </div>
 
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Order Lines</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="border rounded-md divide-y">
-                    <div className="grid grid-cols-12 gap-2 p-3 bg-muted/50 text-sm font-medium">
-                      <div className="col-span-5">Product</div>
-                      <div className="col-span-2 text-center">Qty</div>
-                      <div className="col-span-2 text-right">Unit Cost</div>
-                      <div className="col-span-3 text-right">Total</div>
-                    </div>
-                    {mockPOLines.map((line, index) => (
-                      <div key={index} className="grid grid-cols-12 gap-2 p-3 text-sm">
-                        <div className="col-span-5">{line.productName}</div>
-                        <div className="col-span-2 text-center">{line.quantity}</div>
-                        <div className="col-span-2 text-right">${line.unitCost.toFixed(2)}</div>
-                        <div className="col-span-3 text-right font-medium">${line.total.toFixed(2)}</div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={() => setIsDetailOpen(false)} data-testid="button-close-detail">
+                  Close
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>
