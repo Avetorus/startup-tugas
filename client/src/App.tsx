@@ -122,6 +122,9 @@ function ProtectedRoutes() {
       <Route path="/system/vendors" component={VendorPortal} />
       <Route path="/system/customer-portal" component={CustomerPortal} />
       <Route path="/system/settings" component={Settings} />
+      <Route path="/settings">
+        <Redirect to="/system/settings" />
+      </Route>
       
       <Route>
         <div className="flex items-center justify-center h-full">

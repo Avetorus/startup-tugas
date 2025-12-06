@@ -68,14 +68,14 @@ export function CompanyProvider({ children }: CompanyProviderProps) {
     queryKey: ["/api/companies/hierarchy"],
   });
 
-  // Fetch current context
+  // Fetch current context - include activeCompanyId in query key so it refetches on switch
   const { 
     data: context, 
     isLoading, 
     error,
     refetch: refreshContext 
   } = useQuery<CompanyContextType>({
-    queryKey: ["/api/session/context"],
+    queryKey: ["/api/session/context", activeCompanyId],
     enabled: !!userId && !!activeCompanyId,
     meta: {
       headers: {
@@ -98,14 +98,20 @@ export function CompanyProvider({ children }: CompanyProviderProps) {
       setActiveCompanyId(companyId);
       localStorage.setItem(STORAGE_KEY_COMPANY, companyId);
       
+      // Update the cache directly with the new context data
+      queryClient.setQueryData(["/api/session/context", companyId], data);
+      
+      // Invalidate companies list and hierarchy
+      queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies/hierarchy"] });
+      
       // Invalidate all company-scoped queries to force refetch with new context
       queryClient.invalidateQueries({ 
         predicate: (query) => {
           const key = query.queryKey;
-          // Invalidate queries that have company-specific data
+          // Invalidate queries that have company-specific data (but not the new context we just set)
           return Array.isArray(key) && (
-            key.some(k => typeof k === "string" && k.includes("/companies/")) ||
-            key.some(k => typeof k === "string" && k.includes("/api/session"))
+            key.some(k => typeof k === "string" && k.includes("/companies/"))
           );
         }
       });

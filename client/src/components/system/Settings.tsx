@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { Button } from "@/components/ui/button";
@@ -15,9 +16,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Settings as SettingsIcon, Users, Shield, Palette, Bell, Save } from "lucide-react";
+import { Settings as SettingsIcon, Users, Shield, Palette, Bell, Save, Loader2 } from "lucide-react";
+import { useCompany } from "@/contexts/CompanyContext";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
-// todo: remove mock functionality
 const mockRoles = [
   { id: "admin", name: "Administrator", users: 2, permissions: ["all"] },
   { id: "manager", name: "Manager", users: 5, permissions: ["read", "write", "approve"] },
@@ -32,23 +35,94 @@ const permissionGroups = [
   { name: "HR", permissions: ["View Employees", "Manage Employees", "Approve Leave", "Process Payroll"] },
 ];
 
+const currencies = [
+  { code: "IDR", name: "Indonesian Rupiah" },
+  { code: "USD", name: "US Dollar" },
+  { code: "EUR", name: "Euro" },
+  { code: "GBP", name: "British Pound" },
+  { code: "SGD", name: "Singapore Dollar" },
+  { code: "JPY", name: "Japanese Yen" },
+  { code: "CNY", name: "Chinese Yuan" },
+  { code: "AUD", name: "Australian Dollar" },
+  { code: "MYR", name: "Malaysian Ringgit" },
+  { code: "THB", name: "Thai Baht" },
+];
+
+const timezones = [
+  { value: "Asia/Jakarta", label: "Jakarta (WIB)" },
+  { value: "Asia/Makassar", label: "Makassar (WITA)" },
+  { value: "Asia/Jayapura", label: "Jayapura (WIT)" },
+  { value: "Asia/Singapore", label: "Singapore (SGT)" },
+  { value: "America/New_York", label: "Eastern Time (ET)" },
+  { value: "America/Chicago", label: "Central Time (CT)" },
+  { value: "America/Denver", label: "Mountain Time (MT)" },
+  { value: "America/Los_Angeles", label: "Pacific Time (PT)" },
+  { value: "Europe/London", label: "London (GMT/BST)" },
+  { value: "Europe/Berlin", label: "Berlin (CET)" },
+  { value: "UTC", label: "UTC" },
+];
+
 export function Settings() {
+  const { activeCompany, activeCompanyId, refreshContext } = useCompany();
+  const { toast } = useToast();
+  const queryClientInstance = useQueryClient();
+
   const [activeTab, setActiveTab] = useState("general");
-  const [companyName, setCompanyName] = useState("Unanza Corporation");
-  const [currency, setCurrency] = useState("USD");
-  const [timezone, setTimezone] = useState("America/New_York");
+  const [companyName, setCompanyName] = useState("");
+  const [currency, setCurrency] = useState("IDR");
+  const [timezone, setTimezone] = useState("Asia/Jakarta");
+  const [locale, setLocale] = useState("id-ID");
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [lowStockAlerts, setLowStockAlerts] = useState(true);
   const [orderNotifications, setOrderNotifications] = useState(true);
 
+  useEffect(() => {
+    if (activeCompany) {
+      setCompanyName(activeCompany.name || "");
+      setCurrency(activeCompany.currency || "IDR");
+      setTimezone(activeCompany.timezone || "Asia/Jakarta");
+      setLocale(activeCompany.locale || "id-ID");
+    }
+  }, [activeCompany]);
+
+  const updateCompanyMutation = useMutation({
+    mutationFn: async (updates: { name?: string; currency?: string; timezone?: string; locale?: string }) => {
+      if (!activeCompanyId) throw new Error("No active company");
+      const response = await apiRequest("PATCH", `/api/companies/${activeCompanyId}`, updates);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Settings saved",
+        description: "Company settings have been updated successfully.",
+      });
+      queryClientInstance.invalidateQueries({ queryKey: ["/api/companies"] });
+      queryClientInstance.invalidateQueries({ queryKey: ["/api/session/context"] });
+      queryClientInstance.invalidateQueries({ queryKey: ["/api/companies/hierarchy"] });
+      refreshContext();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save settings",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSave = () => {
-    console.log("Settings saved:", {
-      companyName,
+    updateCompanyMutation.mutate({
+      name: companyName,
       currency,
       timezone,
-      emailNotifications,
-      lowStockAlerts,
-      orderNotifications,
+      locale,
+    });
+  };
+
+  const handleSaveNotifications = () => {
+    toast({
+      title: "Preferences saved",
+      description: "Notification preferences have been updated.",
     });
   };
 
@@ -56,7 +130,7 @@ export function Settings() {
     <div>
       <PageHeader
         title="Settings"
-        description="Manage system preferences and configuration"
+        description={`Manage settings for ${activeCompany?.name || "your company"}`}
       />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -82,8 +156,15 @@ export function Settings() {
         <TabsContent value="general">
           <Card>
             <CardHeader>
-              <CardTitle>General Settings</CardTitle>
-              <CardDescription>Configure basic system preferences</CardDescription>
+              <CardTitle>Company Settings</CardTitle>
+              <CardDescription>
+                Configure settings for {activeCompany?.name || "your company"}
+                {activeCompany?.companyType && (
+                  <span className="ml-2 text-xs uppercase text-muted-foreground">
+                    ({activeCompany.companyType})
+                  </span>
+                )}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid md:grid-cols-2 gap-6">
@@ -103,10 +184,11 @@ export function Settings() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="USD">USD - US Dollar</SelectItem>
-                      <SelectItem value="EUR">EUR - Euro</SelectItem>
-                      <SelectItem value="GBP">GBP - British Pound</SelectItem>
-                      <SelectItem value="JPY">JPY - Japanese Yen</SelectItem>
+                      {currencies.map((c) => (
+                        <SelectItem key={c.code} value={c.code}>
+                          {c.code} - {c.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -117,18 +199,36 @@ export function Settings() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="America/New_York">Eastern Time (ET)</SelectItem>
-                      <SelectItem value="America/Chicago">Central Time (CT)</SelectItem>
-                      <SelectItem value="America/Denver">Mountain Time (MT)</SelectItem>
-                      <SelectItem value="America/Los_Angeles">Pacific Time (PT)</SelectItem>
-                      <SelectItem value="Europe/London">GMT/BST</SelectItem>
+                      {timezones.map((tz) => (
+                        <SelectItem key={tz.value} value={tz.value}>
+                          {tz.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-2">
+                  <Label>Company Code</Label>
+                  <Input
+                    value={activeCompany?.code || ""}
+                    disabled
+                    className="bg-muted"
+                    data-testid="input-company-code"
+                  />
+                  <p className="text-xs text-muted-foreground">Company code cannot be changed</p>
+                </div>
               </div>
               <div className="flex justify-end">
-                <Button onClick={handleSave} data-testid="button-save-general">
-                  <Save className="h-4 w-4 mr-2" />
+                <Button 
+                  onClick={handleSave} 
+                  disabled={updateCompanyMutation.isPending}
+                  data-testid="button-save-general"
+                >
+                  {updateCompanyMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-2" />
+                  )}
                   Save Changes
                 </Button>
               </div>
@@ -234,7 +334,7 @@ export function Settings() {
                 />
               </div>
               <div className="flex justify-end pt-4">
-                <Button onClick={handleSave} data-testid="button-save-notifications">
+                <Button onClick={handleSaveNotifications} data-testid="button-save-notifications">
                   <Save className="h-4 w-4 mr-2" />
                   Save Preferences
                 </Button>

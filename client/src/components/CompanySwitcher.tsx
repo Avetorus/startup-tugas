@@ -83,11 +83,9 @@ function HierarchyItem({ node, onSelect, activeCompanyId, depth = 0 }: Hierarchy
           >
             {node.company.companyType}
           </Badge>
-          {node.company.currency !== "USD" && (
-            <Badge variant="outline" className="text-xs shrink-0">
-              {node.company.currency}
-            </Badge>
-          )}
+          <Badge variant="outline" className="text-xs shrink-0">
+            {node.company.currency}
+          </Badge>
         </div>
         {isActive && <Check className="h-4 w-4 text-primary shrink-0" />}
       </DropdownMenuItem>
