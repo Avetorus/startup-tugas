@@ -205,6 +205,9 @@ Dashboard shows onboarding checklist with tasks:
 - Review Settings
 
 ## Recent Changes
+- 2025-12-06: Improved company switching - query keys now include activeCompanyId for proper cache management
+- 2025-12-06: Fixed Settings page to use real company data with PATCH mutation
+- 2025-12-06: Added /settings redirect to /system/settings for convenience
 - 2025-12-06: Fixed critical security vulnerability - sanitized all PATCH routes to prevent cross-company data tampering
 - 2025-12-06: Added Journal Entries API routes with full CRUD support
 - 2025-12-06: Converted all master data components to use real API data (Warehouses, Products, Customers, Vendors)
