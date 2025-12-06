@@ -86,6 +86,83 @@ export function SalesOrderList() {
     },
   });
 
+  // Workflow mutation: Confirm order (reserves stock)
+  const confirmOrderMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      const response = await apiRequest("POST", `/api/companies/${activeCompany?.id}/sales-orders/${orderId}/confirm`);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "sales-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "stock-levels"] });
+      toast({ 
+        title: "Order Confirmed", 
+        description: `Stock reserved for ${data.reservations?.length || 0} line items` 
+      });
+      setIsDetailOpen(false);
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to confirm order", 
+        description: error.message || "Check stock availability",
+        variant: "destructive" 
+      });
+    },
+  });
+
+  // Workflow mutation: Deliver order (reduces stock, creates delivery, COGS journal entry)
+  const deliverOrderMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      const response = await apiRequest("POST", `/api/companies/${activeCompany?.id}/sales-orders/${orderId}/deliver`);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "sales-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "stock-levels"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "stock-movements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "deliveries"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "journal-entries"] });
+      toast({ 
+        title: "Delivery Created", 
+        description: `Delivery ${data.delivery?.deliveryNumber || ''} created with inventory and COGS recorded` 
+      });
+      setIsDetailOpen(false);
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to create delivery", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
+  // Workflow mutation: Invoice order (creates invoice, AR ledger, revenue journal entry)
+  const invoiceOrderMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      const response = await apiRequest("POST", `/api/companies/${activeCompany?.id}/sales-orders/${orderId}/invoice`);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "sales-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "ar-ledger"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "journal-entries"] });
+      toast({ 
+        title: "Invoice Created", 
+        description: `Invoice ${data.invoice?.invoiceNumber || ''} created and AR recorded` 
+      });
+      setIsDetailOpen(false);
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to create invoice", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       return apiRequest("DELETE", `/api/companies/${activeCompany?.id}/sales-orders/${id}`);
@@ -118,8 +195,26 @@ export function SalesOrderList() {
   };
 
   const handleStatusChange = (orderId: string, newStatus: string) => {
-    updateMutation.mutate({ id: orderId, data: { status: newStatus } });
+    // Use workflow endpoints for status transitions
+    switch (newStatus) {
+      case "confirmed":
+        confirmOrderMutation.mutate(orderId);
+        break;
+      case "delivered":
+        deliverOrderMutation.mutate(orderId);
+        break;
+      case "invoiced":
+        invoiceOrderMutation.mutate(orderId);
+        break;
+      default:
+        // Fallback to simple update for non-workflow status changes
+        updateMutation.mutate({ id: orderId, data: { status: newStatus } });
+    }
   };
+
+  const isWorkflowPending = confirmOrderMutation.isPending || 
+    deliverOrderMutation.isPending || 
+    invoiceOrderMutation.isPending;
 
   const handleExport = () => {
     const csv = [
@@ -270,7 +365,7 @@ export function SalesOrderList() {
               order={selectedOrder}
               onStatusChange={handleStatusChange}
               onClose={() => setIsDetailOpen(false)}
-              isPending={updateMutation.isPending}
+              isPending={isWorkflowPending}
             />
           )}
         </DialogContent>

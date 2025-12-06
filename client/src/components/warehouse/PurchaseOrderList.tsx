@@ -101,6 +101,86 @@ export function PurchaseOrderList() {
     },
   });
 
+  // Workflow mutation: Confirm/Send PO to vendor
+  const confirmPOMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      const response = await apiRequest("POST", `/api/companies/${activeCompany?.id}/purchase-orders/${orderId}/confirm`);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "purchase-orders"] });
+      toast({ 
+        title: "Purchase Order Sent", 
+        description: "Order has been confirmed and sent to vendor" 
+      });
+      setIsDetailOpen(false);
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to confirm PO", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
+  // Workflow mutation: Receive goods (creates goods receipt, updates stock, inventory journal)
+  const receiveGoodsMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      const response = await apiRequest("POST", `/api/companies/${activeCompany?.id}/purchase-orders/${orderId}/receive`);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "purchase-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "stock-levels"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "stock-movements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "goods-receipts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "journal-entries"] });
+      toast({ 
+        title: "Goods Received", 
+        description: `Receipt ${data.goodsReceipt?.receiptNumber || ''} created and inventory updated` 
+      });
+      setIsDetailOpen(false);
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to receive goods", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
+  // Workflow mutation: Create vendor invoice/bill (creates AP invoice, AP ledger, journal entry)
+  const createBillMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      const response = await apiRequest("POST", `/api/companies/${activeCompany?.id}/purchase-orders/${orderId}/bill`);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "purchase-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "ap-ledger"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "journal-entries"] });
+      toast({ 
+        title: "Vendor Bill Created", 
+        description: `Bill ${data.invoice?.invoiceNumber || ''} created and AP recorded` 
+      });
+      setIsDetailOpen(false);
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to create bill", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const isWorkflowPending = confirmPOMutation.isPending || 
+    receiveGoodsMutation.isPending || 
+    createBillMutation.isPending;
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       return apiRequest("DELETE", `/api/companies/${activeCompany?.id}/purchase-orders/${id}`);
@@ -126,7 +206,21 @@ export function PurchaseOrderList() {
   };
 
   const handleStatusChange = (orderId: string, newStatus: string) => {
-    updateMutation.mutate({ id: orderId, data: { status: newStatus } });
+    // Use workflow endpoints for status transitions
+    switch (newStatus) {
+      case "ordered":
+        confirmPOMutation.mutate(orderId);
+        break;
+      case "received":
+        receiveGoodsMutation.mutate(orderId);
+        break;
+      case "billed":
+        createBillMutation.mutate(orderId);
+        break;
+      default:
+        // Fallback to simple update for non-workflow status changes
+        updateMutation.mutate({ id: orderId, data: { status: newStatus } });
+    }
     if (selectedOrder?.id === orderId) {
       setSelectedOrder({ ...selectedOrder, status: newStatus });
     }
@@ -163,11 +257,11 @@ export function PurchaseOrderList() {
           <Button 
             size="sm" 
             onClick={(e) => { e.stopPropagation(); handleStatusChange(order.id, "ordered"); }}
-            disabled={updateMutation.isPending}
+            disabled={isWorkflowPending}
             data-testid={`button-send-${order.id}`}
           >
             <Send className="h-3 w-3 mr-1" />
-            {updateMutation.isPending ? "..." : "Send"}
+            {confirmPOMutation.isPending ? "..." : "Send"}
           </Button>
         );
       case "ordered":
@@ -175,11 +269,11 @@ export function PurchaseOrderList() {
           <Button 
             size="sm" 
             onClick={(e) => { e.stopPropagation(); handleStatusChange(order.id, "received"); }}
-            disabled={updateMutation.isPending}
+            disabled={isWorkflowPending}
             data-testid={`button-receive-${order.id}`}
           >
             <PackageCheck className="h-3 w-3 mr-1" />
-            {updateMutation.isPending ? "..." : "Receive"}
+            {receiveGoodsMutation.isPending ? "..." : "Receive"}
           </Button>
         );
       default:

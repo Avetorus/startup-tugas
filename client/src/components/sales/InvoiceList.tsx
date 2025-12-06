@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { DataTable, type Column } from "@/components/layout/DataTable";
 import { StatusBadge } from "@/components/layout/StatusBadge";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -6,50 +7,150 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
-import { Download, Eye, DollarSign, Printer } from "lucide-react";
-import { mockInvoices } from "@/lib/mockData";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Download, Eye, DollarSign, Printer, Loader2 } from "lucide-react";
+import { useCompany } from "@/contexts/CompanyContext";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import type { Invoice, Customer } from "@shared/schema";
 
-type Invoice = typeof mockInvoices[0];
-
-// todo: remove mock functionality
-const mockInvoiceLines = [
-  { description: "Industrial Widget A", quantity: 5, unitPrice: 49.99, total: 249.95 },
-  { description: "Industrial Widget B", quantity: 3, unitPrice: 79.99, total: 239.97 },
-  { description: "Component Beta", quantity: 2, unitPrice: 189.00, total: 378.00 },
-];
+interface InvoiceDisplay extends Invoice {
+  customerName: string;
+}
 
 export function InvoiceList() {
-  const [invoices, setInvoices] = useState(mockInvoices);
-  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const { activeCompany } = useCompany();
+  const { toast } = useToast();
+  const [selectedInvoice, setSelectedInvoice] = useState<InvoiceDisplay | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState("");
 
-  const handleViewInvoice = (invoice: Invoice) => {
+  const { data: invoices = [], isLoading } = useQuery<Invoice[]>({
+    queryKey: ["/api/companies", activeCompany?.id, "invoices"],
+    enabled: !!activeCompany?.id,
+  });
+
+  const { data: customers = [] } = useQuery<Customer[]>({
+    queryKey: ["/api/companies", activeCompany?.id, "customers"],
+    enabled: !!activeCompany?.id,
+  });
+
+  // Filter for customer (AR) invoices - backend uses "customer" type
+  const invoicesWithCustomers: InvoiceDisplay[] = invoices
+    .filter(inv => inv.invoiceType === "customer")
+    .map(invoice => ({
+      ...invoice,
+      customerName: customers.find(c => c.id === invoice.customerId)?.name || "Unknown Customer",
+    }));
+
+  // Workflow mutation: Receive customer payment
+  const receivePaymentMutation = useMutation({
+    mutationFn: async ({ customerId, invoiceIds, amount }: { customerId: string; invoiceIds: string[]; amount: number }) => {
+      const response = await apiRequest("POST", `/api/companies/${activeCompany?.id}/payments/receive`, {
+        customerId,
+        invoiceIds,
+        amount,
+        paymentMethod: "bank_transfer",
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "ar-ledger"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "payments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "journal-entries"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "sales-orders"] });
+      toast({ 
+        title: "Payment Received", 
+        description: `Payment ${data.payment?.paymentNumber || ''} recorded and AR updated` 
+      });
+      setIsPaymentOpen(false);
+      setSelectedInvoice(null);
+      setPaymentAmount("");
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to record payment", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const handleViewInvoice = (invoice: InvoiceDisplay) => {
     setSelectedInvoice(invoice);
     setIsDetailOpen(true);
   };
 
-  const handleRecordPayment = (invoiceId: string) => {
-    setInvoices(invoices.map(inv => 
-      inv.id === invoiceId ? { ...inv, status: "paid" } : inv
-    ));
-    console.log("Payment recorded for:", invoiceId);
+  const handleOpenPayment = (invoice: InvoiceDisplay) => {
+    setSelectedInvoice(invoice);
+    // Normalize to string since schema may return numbers
+    const balance = invoice.amountDue ?? invoice.total ?? 0;
+    setPaymentAmount(String(balance));
+    setIsPaymentOpen(true);
+  };
+
+  const handleRecordPayment = () => {
+    if (!selectedInvoice || !paymentAmount) return;
+    if (!selectedInvoice.customerId) {
+      toast({ 
+        title: "Cannot record payment", 
+        description: "Invoice is missing customer information",
+        variant: "destructive" 
+      });
+      return;
+    }
+    const amount = parseFloat(paymentAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast({ 
+        title: "Invalid amount", 
+        description: "Please enter a valid payment amount greater than zero",
+        variant: "destructive" 
+      });
+      return;
+    }
+    const balanceDue = Number(selectedInvoice.amountDue ?? selectedInvoice.total ?? 0);
+    if (amount > balanceDue) {
+      toast({ 
+        title: "Invalid amount", 
+        description: `Payment cannot exceed balance due (Rp ${balanceDue.toLocaleString()})`,
+        variant: "destructive" 
+      });
+      return;
+    }
+    receivePaymentMutation.mutate({
+      customerId: selectedInvoice.customerId,
+      invoiceIds: [selectedInvoice.id],
+      amount,
+    });
   };
 
   const handlePrint = () => {
     window.print();
-    console.log("Print invoice");
   };
 
-  const columns: Column<Invoice>[] = [
-    { key: "id", header: "Invoice #", sortable: true },
-    { key: "orderId", header: "Order", sortable: true },
+  const columns: Column<InvoiceDisplay>[] = [
+    { key: "invoiceNumber", header: "Invoice #", sortable: true },
     { key: "customerName", header: "Customer", sortable: true },
-    { key: "date", header: "Date", sortable: true },
-    { key: "dueDate", header: "Due Date", sortable: true },
+    { 
+      key: "invoiceDate", 
+      header: "Date", 
+      sortable: true,
+      render: (item) => item.invoiceDate ? new Date(item.invoiceDate).toLocaleDateString() : "-"
+    },
+    { 
+      key: "dueDate", 
+      header: "Due Date", 
+      sortable: true,
+      render: (item) => item.dueDate ? new Date(item.dueDate).toLocaleDateString() : "-"
+    },
     { 
       key: "status", 
       header: "Status",
@@ -60,7 +161,14 @@ export function InvoiceList() {
       header: "Total", 
       sortable: true,
       className: "text-right",
-      render: (item) => `$${item.total.toLocaleString()}`
+      render: (item) => `Rp ${Number(item.total ?? 0).toLocaleString()}`
+    },
+    { 
+      key: "amountDue", 
+      header: "Balance", 
+      sortable: true,
+      className: "text-right",
+      render: (item) => `Rp ${Number(item.amountDue ?? 0).toLocaleString()}`
     },
     {
       key: "actions",
@@ -72,7 +180,8 @@ export function InvoiceList() {
             <Button 
               variant="ghost" 
               size="icon" 
-              onClick={() => handleRecordPayment(item.id)}
+              onClick={() => handleOpenPayment(item)}
+              disabled={receivePaymentMutation.isPending}
               data-testid={`button-pay-${item.id}`}
             >
               <DollarSign className="h-4 w-4" />
@@ -85,6 +194,14 @@ export function InvoiceList() {
       ),
     },
   ];
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -100,13 +217,75 @@ export function InvoiceList() {
       />
 
       <DataTable
-        data={invoices}
+        data={invoicesWithCustomers}
         columns={columns}
         searchKey="customerName"
         searchPlaceholder="Search invoices..."
         onRowClick={handleViewInvoice}
       />
 
+      {/* Payment Dialog */}
+      <Dialog open={isPaymentOpen} onOpenChange={setIsPaymentOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Record Payment</DialogTitle>
+            <DialogDescription>
+              Record payment for invoice {selectedInvoice?.invoiceNumber}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedInvoice && (
+            <div className="space-y-4">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Customer:</span>
+                <span>{selectedInvoice.customerName}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Invoice Total:</span>
+                <span>Rp {Number(selectedInvoice.total ?? 0).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Balance Due:</span>
+                <span className="font-semibold">Rp {Number(selectedInvoice.amountDue ?? 0).toLocaleString()}</span>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="amount">Payment Amount</Label>
+                <Input
+                  id="amount"
+                  type="number"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  placeholder="Enter payment amount"
+                  data-testid="input-payment-amount"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setIsPaymentOpen(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleRecordPayment} 
+                  disabled={receivePaymentMutation.isPending || !paymentAmount}
+                  data-testid="button-confirm-payment"
+                >
+                  {receivePaymentMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <DollarSign className="h-4 w-4 mr-2" />
+                      Record Payment
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Invoice Detail Dialog */}
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -125,13 +304,11 @@ export function InvoiceList() {
                         <span className="font-bold text-xl">Unanza</span>
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        123 Business Street<br />
-                        City, State 12345<br />
-                        contact@unanza.com
+                        Enterprise Resource Planning
                       </p>
                     </div>
                     <div className="text-right">
-                      <h2 className="text-2xl font-bold" data-testid="text-invoice-id">{selectedInvoice.id}</h2>
+                      <h2 className="text-2xl font-bold" data-testid="text-invoice-number">{selectedInvoice.invoiceNumber}</h2>
                       <StatusBadge status={selectedInvoice.status as "paid" | "unpaid" | "partial"} className="mt-2" />
                     </div>
                   </div>
@@ -140,92 +317,60 @@ export function InvoiceList() {
                     <div>
                       <h3 className="text-sm font-medium text-muted-foreground mb-1">Bill To</h3>
                       <p className="font-medium">{selectedInvoice.customerName}</p>
-                      <p className="text-sm text-muted-foreground">
-                        456 Customer Ave<br />
-                        City, State 67890
-                      </p>
                     </div>
                     <div className="text-right">
                       <div className="space-y-1 text-sm">
-                        <div className="flex justify-between">
+                        <div className="flex justify-between gap-4">
                           <span className="text-muted-foreground">Invoice Date:</span>
-                          <span>{selectedInvoice.date}</span>
+                          <span>{selectedInvoice.invoiceDate ? new Date(selectedInvoice.invoiceDate).toLocaleDateString() : "-"}</span>
                         </div>
-                        <div className="flex justify-between">
+                        <div className="flex justify-between gap-4">
                           <span className="text-muted-foreground">Due Date:</span>
-                          <span>{selectedInvoice.dueDate}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Order:</span>
-                          <span>{selectedInvoice.orderId}</span>
+                          <span>{selectedInvoice.dueDate ? new Date(selectedInvoice.dueDate).toLocaleDateString() : "-"}</span>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="border rounded-md mb-8">
-                    <div className="grid grid-cols-12 gap-2 p-3 bg-muted/50 text-sm font-medium">
-                      <div className="col-span-5">Description</div>
-                      <div className="col-span-2 text-center">Qty</div>
-                      <div className="col-span-2 text-right">Unit Price</div>
-                      <div className="col-span-3 text-right">Amount</div>
+                  <div className="border-t pt-4 space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Subtotal</span>
+                      <span>Rp {Number(selectedInvoice.subtotal ?? 0).toLocaleString()}</span>
                     </div>
-                    {mockInvoiceLines.map((line, index) => (
-                      <div key={index} className="grid grid-cols-12 gap-2 p-3 text-sm border-t">
-                        <div className="col-span-5">{line.description}</div>
-                        <div className="col-span-2 text-center">{line.quantity}</div>
-                        <div className="col-span-2 text-right">${line.unitPrice.toFixed(2)}</div>
-                        <div className="col-span-3 text-right font-medium">${line.total.toFixed(2)}</div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="flex justify-end">
-                    <div className="w-64 space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Subtotal</span>
-                        <span>${(selectedInvoice.total * 0.9).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Tax (10%)</span>
-                        <span>${(selectedInvoice.total * 0.1).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between font-bold text-base pt-2 border-t">
-                        <span>Total Due</span>
-                        <span data-testid="text-invoice-total">${selectedInvoice.total.toLocaleString()}</span>
-                      </div>
-                      {selectedInvoice.status === "partial" && (selectedInvoice as Invoice & { paid?: number }).paid && (
-                        <>
-                          <div className="flex justify-between text-green-600">
-                            <span>Paid</span>
-                            <span>-${((selectedInvoice as Invoice & { paid?: number }).paid || 0).toLocaleString()}</span>
-                          </div>
-                          <div className="flex justify-between font-bold text-red-600">
-                            <span>Balance Due</span>
-                            <span>${(selectedInvoice.total - ((selectedInvoice as Invoice & { paid?: number }).paid || 0)).toLocaleString()}</span>
-                          </div>
-                        </>
-                      )}
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Tax</span>
+                      <span>Rp {Number(selectedInvoice.taxAmount ?? 0).toLocaleString()}</span>
                     </div>
-                  </div>
-
-                  <div className="mt-8 pt-4 border-t text-center text-sm text-muted-foreground">
-                    Thank you for your business!
+                    <div className="flex justify-between font-semibold text-lg pt-2 border-t">
+                      <span>Total</span>
+                      <span data-testid="text-invoice-total">Rp {Number(selectedInvoice.total ?? 0).toLocaleString()}</span>
+                    </div>
+                    {selectedInvoice.status !== "paid" && (
+                      <div className="flex justify-between font-semibold text-destructive">
+                        <span>Balance Due</span>
+                        <span>Rp {Number(selectedInvoice.amountDue ?? 0).toLocaleString()}</span>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
 
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={handlePrint} data-testid="button-print">
-                  <Printer className="h-4 w-4 mr-2" />
-                  Print
-                </Button>
+              <div className="flex justify-between print:hidden">
                 {selectedInvoice.status !== "paid" && (
-                  <Button onClick={() => handleRecordPayment(selectedInvoice.id)} data-testid="button-record-payment">
+                  <Button onClick={() => { setIsDetailOpen(false); handleOpenPayment(selectedInvoice); }}>
                     <DollarSign className="h-4 w-4 mr-2" />
                     Record Payment
                   </Button>
                 )}
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={handlePrint}>
+                    <Printer className="h-4 w-4 mr-2" />
+                    Print
+                  </Button>
+                  <Button variant="outline" onClick={() => setIsDetailOpen(false)}>
+                    Close
+                  </Button>
+                </div>
               </div>
             </div>
           )}
