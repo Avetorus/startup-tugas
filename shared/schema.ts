@@ -502,6 +502,315 @@ export const journalEntryLines = pgTable("journal_entry_lines", {
 }));
 
 // ============================================================================
+// INVENTORY MANAGEMENT
+// ============================================================================
+
+// Stock levels per product/warehouse
+export const stockLevels = pgTable("stock_levels", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id),
+  productId: varchar("product_id").notNull().references(() => products.id),
+  warehouseId: varchar("warehouse_id").notNull().references(() => warehouses.id),
+  quantityOnHand: decimal("quantity_on_hand", { precision: 18, scale: 4 }).default("0"),
+  quantityReserved: decimal("quantity_reserved", { precision: 18, scale: 4 }).default("0"),
+  quantityAvailable: decimal("quantity_available", { precision: 18, scale: 4 }).default("0"),
+  quantityOnOrder: decimal("quantity_on_order", { precision: 18, scale: 4 }).default("0"),
+  averageCost: decimal("average_cost", { precision: 18, scale: 4 }).default("0"),
+  lastMovementDate: timestamp("last_movement_date"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  productWarehouseUnique: unique().on(table.companyId, table.productId, table.warehouseId),
+  companyIdx: index("stock_levels_company_idx").on(table.companyId),
+  productIdx: index("stock_levels_product_idx").on(table.productId),
+  warehouseIdx: index("stock_levels_warehouse_idx").on(table.warehouseId),
+}));
+
+// Stock movements for audit trail
+export const stockMovements = pgTable("stock_movements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id),
+  movementNumber: varchar("movement_number", { length: 30 }).notNull(),
+  productId: varchar("product_id").notNull().references(() => products.id),
+  warehouseId: varchar("warehouse_id").notNull().references(() => warehouses.id),
+  movementType: varchar("movement_type", { length: 20 }).notNull(), // receipt, issue, transfer_in, transfer_out, adjustment
+  movementDate: timestamp("movement_date").notNull().defaultNow(),
+  quantity: decimal("quantity", { precision: 18, scale: 4 }).notNull(),
+  unitCost: decimal("unit_cost", { precision: 18, scale: 4 }).default("0"),
+  totalCost: decimal("total_cost", { precision: 18, scale: 4 }).default("0"),
+  sourceDocument: varchar("source_document", { length: 50 }), // sales_order, purchase_order, delivery, goods_receipt, adjustment
+  sourceDocumentId: varchar("source_document_id"),
+  sourceDocumentNumber: varchar("source_document_number", { length: 30 }),
+  reference: text("reference"),
+  journalEntryId: varchar("journal_entry_id").references(() => journalEntries.id),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  companyMovementUnique: unique().on(table.companyId, table.movementNumber),
+  companyIdx: index("stock_movements_company_idx").on(table.companyId),
+  productIdx: index("stock_movements_product_idx").on(table.productId),
+  warehouseIdx: index("stock_movements_warehouse_idx").on(table.warehouseId),
+  sourceIdx: index("stock_movements_source_idx").on(table.sourceDocument, table.sourceDocumentId),
+}));
+
+// Stock reservations for sales orders
+export const stockReservations = pgTable("stock_reservations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id),
+  salesOrderId: varchar("sales_order_id").notNull().references(() => salesOrders.id),
+  salesOrderLineId: varchar("sales_order_line_id"),
+  productId: varchar("product_id").notNull().references(() => products.id),
+  warehouseId: varchar("warehouse_id").notNull().references(() => warehouses.id),
+  quantityReserved: decimal("quantity_reserved", { precision: 18, scale: 4 }).notNull(),
+  quantityFulfilled: decimal("quantity_fulfilled", { precision: 18, scale: 4 }).default("0"),
+  status: varchar("status", { length: 20 }).default("active"), // active, fulfilled, cancelled
+  reservedAt: timestamp("reserved_at").defaultNow(),
+  fulfilledAt: timestamp("fulfilled_at"),
+  createdBy: varchar("created_by").references(() => users.id),
+}, (table) => ({
+  salesOrderProductUnique: unique().on(table.salesOrderId, table.productId, table.warehouseId),
+  companyIdx: index("stock_reservations_company_idx").on(table.companyId),
+  salesOrderIdx: index("stock_reservations_so_idx").on(table.salesOrderId),
+  productIdx: index("stock_reservations_product_idx").on(table.productId),
+}));
+
+// ============================================================================
+// DELIVERIES / SHIPPING
+// ============================================================================
+
+// Delivery notes / Shipping documents
+export const deliveries = pgTable("deliveries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id),
+  deliveryNumber: varchar("delivery_number", { length: 30 }).notNull(),
+  salesOrderId: varchar("sales_order_id").notNull().references(() => salesOrders.id),
+  customerId: varchar("customer_id").notNull().references(() => customers.id),
+  warehouseId: varchar("warehouse_id").notNull().references(() => warehouses.id),
+  deliveryDate: timestamp("delivery_date").notNull().defaultNow(),
+  status: varchar("status", { length: 20 }).default("draft"), // draft, shipped, delivered, cancelled
+  shippingAddress: text("shipping_address"),
+  shippingMethod: varchar("shipping_method", { length: 50 }),
+  trackingNumber: varchar("tracking_number", { length: 100 }),
+  notes: text("notes"),
+  journalEntryId: varchar("journal_entry_id").references(() => journalEntries.id),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  companyDeliveryUnique: unique().on(table.companyId, table.deliveryNumber),
+  companyIdx: index("deliveries_company_idx").on(table.companyId),
+  salesOrderIdx: index("deliveries_so_idx").on(table.salesOrderId),
+  customerIdx: index("deliveries_customer_idx").on(table.customerId),
+}));
+
+// Delivery line items
+export const deliveryLines = pgTable("delivery_lines", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  deliveryId: varchar("delivery_id").notNull().references(() => deliveries.id),
+  lineNumber: integer("line_number").notNull(),
+  productId: varchar("product_id").notNull().references(() => products.id),
+  description: text("description"),
+  quantityOrdered: decimal("quantity_ordered", { precision: 18, scale: 4 }).notNull(),
+  quantityDelivered: decimal("quantity_delivered", { precision: 18, scale: 4 }).notNull(),
+  unitCost: decimal("unit_cost", { precision: 18, scale: 4 }).default("0"),
+  totalCost: decimal("total_cost", { precision: 18, scale: 4 }).default("0"),
+  stockMovementId: varchar("stock_movement_id").references(() => stockMovements.id),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  deliveryIdx: index("delivery_lines_delivery_idx").on(table.deliveryId),
+}));
+
+// ============================================================================
+// GOODS RECEIPTS (Purchase receiving)
+// ============================================================================
+
+export const goodsReceipts = pgTable("goods_receipts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id),
+  receiptNumber: varchar("receipt_number", { length: 30 }).notNull(),
+  purchaseOrderId: varchar("purchase_order_id").notNull().references(() => purchaseOrders.id),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id),
+  warehouseId: varchar("warehouse_id").notNull().references(() => warehouses.id),
+  receiptDate: timestamp("receipt_date").notNull().defaultNow(),
+  status: varchar("status", { length: 20 }).default("draft"), // draft, received, cancelled
+  notes: text("notes"),
+  journalEntryId: varchar("journal_entry_id").references(() => journalEntries.id),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  companyReceiptUnique: unique().on(table.companyId, table.receiptNumber),
+  companyIdx: index("goods_receipts_company_idx").on(table.companyId),
+  purchaseOrderIdx: index("goods_receipts_po_idx").on(table.purchaseOrderId),
+  vendorIdx: index("goods_receipts_vendor_idx").on(table.vendorId),
+}));
+
+export const goodsReceiptLines = pgTable("goods_receipt_lines", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  goodsReceiptId: varchar("goods_receipt_id").notNull().references(() => goodsReceipts.id),
+  lineNumber: integer("line_number").notNull(),
+  productId: varchar("product_id").notNull().references(() => products.id),
+  description: text("description"),
+  quantityOrdered: decimal("quantity_ordered", { precision: 18, scale: 4 }).notNull(),
+  quantityReceived: decimal("quantity_received", { precision: 18, scale: 4 }).notNull(),
+  unitCost: decimal("unit_cost", { precision: 18, scale: 4 }).default("0"),
+  totalCost: decimal("total_cost", { precision: 18, scale: 4 }).default("0"),
+  stockMovementId: varchar("stock_movement_id").references(() => stockMovements.id),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  receiptIdx: index("goods_receipt_lines_receipt_idx").on(table.goodsReceiptId),
+}));
+
+// ============================================================================
+// INVOICES (AR/AP)
+// ============================================================================
+
+export const invoices = pgTable("invoices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id),
+  invoiceNumber: varchar("invoice_number", { length: 30 }).notNull(),
+  invoiceType: varchar("invoice_type", { length: 20 }).notNull(), // customer (AR), vendor (AP)
+  customerId: varchar("customer_id").references(() => customers.id),
+  vendorId: varchar("vendor_id").references(() => vendors.id),
+  salesOrderId: varchar("sales_order_id").references(() => salesOrders.id),
+  purchaseOrderId: varchar("purchase_order_id").references(() => purchaseOrders.id),
+  deliveryId: varchar("delivery_id").references(() => deliveries.id),
+  goodsReceiptId: varchar("goods_receipt_id").references(() => goodsReceipts.id),
+  invoiceDate: timestamp("invoice_date").notNull().defaultNow(),
+  dueDate: timestamp("due_date"),
+  fiscalPeriodId: varchar("fiscal_period_id").references(() => companyFiscalPeriods.id),
+  status: varchar("status", { length: 20 }).default("draft"), // draft, posted, partially_paid, paid, cancelled
+  subtotal: decimal("subtotal", { precision: 18, scale: 2 }).default("0"),
+  taxAmount: decimal("tax_amount", { precision: 18, scale: 2 }).default("0"),
+  total: decimal("total", { precision: 18, scale: 2 }).default("0"),
+  amountPaid: decimal("amount_paid", { precision: 18, scale: 2 }).default("0"),
+  amountDue: decimal("amount_due", { precision: 18, scale: 2 }).default("0"),
+  currency: varchar("currency", { length: 3 }).default("IDR"),
+  notes: text("notes"),
+  journalEntryId: varchar("journal_entry_id").references(() => journalEntries.id),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  companyInvoiceUnique: unique().on(table.companyId, table.invoiceNumber),
+  companyIdx: index("invoices_company_idx").on(table.companyId),
+  customerIdx: index("invoices_customer_idx").on(table.customerId),
+  vendorIdx: index("invoices_vendor_idx").on(table.vendorId),
+  salesOrderIdx: index("invoices_so_idx").on(table.salesOrderId),
+  purchaseOrderIdx: index("invoices_po_idx").on(table.purchaseOrderId),
+}));
+
+export const invoiceLines = pgTable("invoice_lines", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  invoiceId: varchar("invoice_id").notNull().references(() => invoices.id),
+  lineNumber: integer("line_number").notNull(),
+  productId: varchar("product_id").references(() => products.id),
+  description: text("description"),
+  quantity: decimal("quantity", { precision: 18, scale: 4 }).default("1"),
+  unitPrice: decimal("unit_price", { precision: 18, scale: 4 }).default("0"),
+  discountPercent: decimal("discount_percent", { precision: 5, scale: 2 }).default("0"),
+  taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("0"),
+  lineTotal: decimal("line_total", { precision: 18, scale: 2 }).default("0"),
+  accountId: varchar("account_id").references(() => chartOfAccounts.id),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  invoiceIdx: index("invoice_lines_invoice_idx").on(table.invoiceId),
+}));
+
+// ============================================================================
+// PAYMENTS
+// ============================================================================
+
+export const payments = pgTable("payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id),
+  paymentNumber: varchar("payment_number", { length: 30 }).notNull(),
+  paymentType: varchar("payment_type", { length: 20 }).notNull(), // receipt (from customer), payment (to vendor)
+  customerId: varchar("customer_id").references(() => customers.id),
+  vendorId: varchar("vendor_id").references(() => vendors.id),
+  paymentDate: timestamp("payment_date").notNull().defaultNow(),
+  fiscalPeriodId: varchar("fiscal_period_id").references(() => companyFiscalPeriods.id),
+  paymentMethod: varchar("payment_method", { length: 30 }), // cash, bank_transfer, check, credit_card
+  bankAccountId: varchar("bank_account_id").references(() => chartOfAccounts.id),
+  amount: decimal("amount", { precision: 18, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).default("IDR"),
+  exchangeRate: decimal("exchange_rate", { precision: 18, scale: 8 }).default("1"),
+  reference: varchar("reference", { length: 100 }),
+  notes: text("notes"),
+  status: varchar("status", { length: 20 }).default("draft"), // draft, posted, cancelled
+  journalEntryId: varchar("journal_entry_id").references(() => journalEntries.id),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  companyPaymentUnique: unique().on(table.companyId, table.paymentNumber),
+  companyIdx: index("payments_company_idx").on(table.companyId),
+  customerIdx: index("payments_customer_idx").on(table.customerId),
+  vendorIdx: index("payments_vendor_idx").on(table.vendorId),
+}));
+
+// Payment applications to invoices
+export const paymentApplications = pgTable("payment_applications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  paymentId: varchar("payment_id").notNull().references(() => payments.id),
+  invoiceId: varchar("invoice_id").notNull().references(() => invoices.id),
+  amountApplied: decimal("amount_applied", { precision: 18, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  paymentIdx: index("payment_applications_payment_idx").on(table.paymentId),
+  invoiceIdx: index("payment_applications_invoice_idx").on(table.invoiceId),
+}));
+
+// ============================================================================
+// AR/AP LEDGER
+// ============================================================================
+
+export const arApLedger = pgTable("ar_ap_ledger", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id),
+  ledgerType: varchar("ledger_type", { length: 10 }).notNull(), // AR, AP
+  customerId: varchar("customer_id").references(() => customers.id),
+  vendorId: varchar("vendor_id").references(() => vendors.id),
+  transactionDate: timestamp("transaction_date").notNull().defaultNow(),
+  transactionType: varchar("transaction_type", { length: 20 }).notNull(), // invoice, payment, credit_memo, debit_memo
+  documentId: varchar("document_id").notNull(),
+  documentNumber: varchar("document_number", { length: 30 }).notNull(),
+  description: text("description"),
+  debitAmount: decimal("debit_amount", { precision: 18, scale: 2 }).default("0"),
+  creditAmount: decimal("credit_amount", { precision: 18, scale: 2 }).default("0"),
+  runningBalance: decimal("running_balance", { precision: 18, scale: 2 }).default("0"),
+  currency: varchar("currency", { length: 3 }).default("IDR"),
+  journalEntryId: varchar("journal_entry_id").references(() => journalEntries.id),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  companyIdx: index("ar_ap_ledger_company_idx").on(table.companyId),
+  customerIdx: index("ar_ap_ledger_customer_idx").on(table.customerId),
+  vendorIdx: index("ar_ap_ledger_vendor_idx").on(table.vendorId),
+  dateIdx: index("ar_ap_ledger_date_idx").on(table.transactionDate),
+}));
+
+// ============================================================================
+// DOCUMENT SEQUENCES
+// ============================================================================
+
+export const documentSequences = pgTable("document_sequences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id),
+  documentType: varchar("document_type", { length: 30 }).notNull(), // SO, PO, INV, PAY, DEL, GR, JE, SM
+  prefix: varchar("prefix", { length: 10 }),
+  suffix: varchar("suffix", { length: 10 }),
+  currentNumber: integer("current_number").notNull().default(0),
+  numberLength: integer("number_length").default(6),
+  fiscalYear: integer("fiscal_year"),
+  resetAnnually: boolean("reset_annually").default(false),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  companyDocTypeUnique: unique().on(table.companyId, table.documentType, table.fiscalYear),
+  companyIdx: index("document_sequences_company_idx").on(table.companyId),
+}));
+
+// ============================================================================
 // CONSOLIDATION
 // ============================================================================
 
@@ -721,6 +1030,115 @@ export const insertJournalEntryLineSchema = createInsertSchema(journalEntryLines
 });
 export type InsertJournalEntryLine = z.infer<typeof insertJournalEntryLineSchema>;
 export type JournalEntryLine = typeof journalEntryLines.$inferSelect;
+
+// Stock Level schemas
+export const insertStockLevelSchema = createInsertSchema(stockLevels).omit({
+  id: true,
+  updatedAt: true,
+});
+export type InsertStockLevel = z.infer<typeof insertStockLevelSchema>;
+export type StockLevel = typeof stockLevels.$inferSelect;
+
+// Stock Movement schemas
+export const insertStockMovementSchema = createInsertSchema(stockMovements).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertStockMovement = z.infer<typeof insertStockMovementSchema>;
+export type StockMovement = typeof stockMovements.$inferSelect;
+
+// Stock Reservation schemas
+export const insertStockReservationSchema = createInsertSchema(stockReservations).omit({
+  id: true,
+  reservedAt: true,
+});
+export type InsertStockReservation = z.infer<typeof insertStockReservationSchema>;
+export type StockReservation = typeof stockReservations.$inferSelect;
+
+// Delivery schemas
+export const insertDeliverySchema = createInsertSchema(deliveries).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertDelivery = z.infer<typeof insertDeliverySchema>;
+export type Delivery = typeof deliveries.$inferSelect;
+
+// Delivery Line schemas
+export const insertDeliveryLineSchema = createInsertSchema(deliveryLines).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertDeliveryLine = z.infer<typeof insertDeliveryLineSchema>;
+export type DeliveryLine = typeof deliveryLines.$inferSelect;
+
+// Goods Receipt schemas
+export const insertGoodsReceiptSchema = createInsertSchema(goodsReceipts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertGoodsReceipt = z.infer<typeof insertGoodsReceiptSchema>;
+export type GoodsReceipt = typeof goodsReceipts.$inferSelect;
+
+// Goods Receipt Line schemas
+export const insertGoodsReceiptLineSchema = createInsertSchema(goodsReceiptLines).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertGoodsReceiptLine = z.infer<typeof insertGoodsReceiptLineSchema>;
+export type GoodsReceiptLine = typeof goodsReceiptLines.$inferSelect;
+
+// Invoice schemas
+export const insertInvoiceSchema = createInsertSchema(invoices).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
+export type Invoice = typeof invoices.$inferSelect;
+
+// Invoice Line schemas
+export const insertInvoiceLineSchema = createInsertSchema(invoiceLines).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertInvoiceLine = z.infer<typeof insertInvoiceLineSchema>;
+export type InvoiceLine = typeof invoiceLines.$inferSelect;
+
+// Payment schemas
+export const insertPaymentSchema = createInsertSchema(payments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertPayment = z.infer<typeof insertPaymentSchema>;
+export type Payment = typeof payments.$inferSelect;
+
+// Payment Application schemas
+export const insertPaymentApplicationSchema = createInsertSchema(paymentApplications).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertPaymentApplication = z.infer<typeof insertPaymentApplicationSchema>;
+export type PaymentApplication = typeof paymentApplications.$inferSelect;
+
+// AR/AP Ledger schemas
+export const insertArApLedgerSchema = createInsertSchema(arApLedger).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertArApLedger = z.infer<typeof insertArApLedgerSchema>;
+export type ArApLedger = typeof arApLedger.$inferSelect;
+
+// Document Sequence schemas
+export const insertDocumentSequenceSchema = createInsertSchema(documentSequences).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertDocumentSequence = z.infer<typeof insertDocumentSequenceSchema>;
+export type DocumentSequence = typeof documentSequences.$inferSelect;
 
 // Exchange Rate schemas
 export const insertExchangeRateSchema = createInsertSchema(exchangeRates).omit({
