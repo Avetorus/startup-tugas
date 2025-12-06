@@ -192,12 +192,16 @@ function AppRouter() {
     );
   }
 
-  if (needsSetup && location !== "/setup") {
+  const isSetupRoute = location === "/setup" || location.startsWith("/setup/");
+
+  if (needsSetup && !isSetupRoute) {
     return <Redirect to="/setup" />;
   }
 
   return (
     <Switch>
+      <Route path="/setup/company" component={Setup} />
+      <Route path="/setup/admin-user" component={Setup} />
       <Route path="/setup" component={Setup} />
       <Route path="/login" component={Login} />
       <Route>

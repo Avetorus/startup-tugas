@@ -328,11 +328,27 @@ export async function registerRoutes(
     try {
       const stats = await storage.getSystemStats();
       const isInitialized = stats.companyCount > 0;
+      const needsAdminSetup = stats.companyCount > 0 && stats.userCount === 0;
+      
+      // If we need admin setup, include the pending company info
+      let pendingCompany = null;
+      if (needsAdminSetup) {
+        const companies = await storage.getCompanies();
+        if (companies.length > 0) {
+          const company = companies[0];
+          pendingCompany = {
+            id: company.id,
+            code: company.code,
+            name: company.name,
+          };
+        }
+      }
       
       res.json({
         isInitialized,
         needsCompanySetup: stats.companyCount === 0,
-        needsAdminSetup: stats.companyCount > 0 && stats.userCount === 0,
+        needsAdminSetup,
+        pendingCompany,
         stats,
       });
     } catch (error) {
