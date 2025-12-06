@@ -49,7 +49,11 @@ Unanza is a comprehensive multi-tenant enterprise ERP system with hierarchical m
 ├── server/
 │   ├── index.ts             # Express server entry
 │   ├── routes.ts            # API endpoints
-│   ├── storage.ts           # In-memory storage with company scoping
+│   ├── storage.ts           # IStorage interface & MemStorage (legacy)
+│   ├── database-storage.ts  # DatabaseStorage (PostgreSQL + Drizzle ORM)
+│   ├── db.ts                # Database connection pool
+│   ├── seed.ts              # Database seed script for demo data
+│   ├── auth.ts              # JWT authentication middleware
 │   └── vite.ts              # Vite dev server integration
 ├── shared/
 │   └── schema.ts            # Drizzle schema & types
@@ -204,7 +208,20 @@ Dashboard shows onboarding checklist with tasks:
 - Configure User Roles
 - Review Settings
 
+## Database Commands
+
+```bash
+# Push schema changes to database
+npm run db:push
+
+# Seed database with demo data
+npx tsx server/seed.ts
+```
+
 ## Recent Changes
+- 2025-12-06: MAJOR: Migrated from in-memory storage (MemStorage) to PostgreSQL (DatabaseStorage)
+- 2025-12-06: Created DatabaseStorage class implementing full IStorage interface with Drizzle ORM
+- 2025-12-06: Created seed.ts for initial demo data (companies, users, roles, accounts, warehouses)
 - 2025-12-06: Improved company switching - query keys now include activeCompanyId for proper cache management
 - 2025-12-06: Fixed Settings page to use real company data with PATCH mutation
 - 2025-12-06: Added /settings redirect to /system/settings for convenience
