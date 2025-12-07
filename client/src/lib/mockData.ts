@@ -88,7 +88,7 @@ export interface ChartOfAccountsEntry {
 
 export const mockAccounts: ChartOfAccountsEntry[] = [
   // ASSETS (1000-1999)
-  { id: "1000", name: "Assets", type: "asset", level: 1, parentId: null, balance: 0, isPostable: false },
+  { id: "1000", name: "Assets", type: "asset", level: 1, parentId: "", balance: 0, isPostable: false },
   
   // Current Assets (1100-1199)
   { id: "1100", name: "Current Assets", type: "asset", level: 2, parentId: "1000", balance: 0, isPostable: false },
@@ -137,7 +137,7 @@ export const mockAccounts: ChartOfAccountsEntry[] = [
   { id: "1261", name: "Accumulated Depreciation - Computers", type: "asset", level: 3, parentId: "1200", balance: -32000, isPostable: true },
   
   // LIABILITIES (2000-2999)
-  { id: "2000", name: "Liabilities", type: "liability", level: 1, parentId: null, balance: 0, isPostable: false },
+  { id: "2000", name: "Liabilities", type: "liability", level: 1, parentId: "", balance: 0, isPostable: false },
   
   // Current Liabilities (2100-2199)
   { id: "2100", name: "Current Liabilities", type: "liability", level: 2, parentId: "2000", balance: 0, isPostable: false },
@@ -174,7 +174,7 @@ export const mockAccounts: ChartOfAccountsEntry[] = [
   { id: "2230", name: "Equipment Loans", type: "liability", level: 3, parentId: "2200", balance: 75000, isPostable: true },
   
   // EQUITY (3000-3999)
-  { id: "3000", name: "Equity", type: "equity", level: 1, parentId: null, balance: 0, isPostable: false },
+  { id: "3000", name: "Equity", type: "equity", level: 1, parentId: "", balance: 0, isPostable: false },
   
   // Owner's Equity (3100-3199)
   { id: "3100", name: "Owner's Equity", type: "equity", level: 2, parentId: "3000", balance: 0, isPostable: false },
@@ -191,7 +191,7 @@ export const mockAccounts: ChartOfAccountsEntry[] = [
   { id: "3230", name: "Dividends Paid", type: "equity", level: 3, parentId: "3200", balance: -15000, isPostable: true },
   
   // REVENUE (4000-4999)
-  { id: "4000", name: "Revenue", type: "revenue", level: 1, parentId: null, balance: 0, isPostable: false },
+  { id: "4000", name: "Revenue", type: "revenue", level: 1, parentId: "", balance: 0, isPostable: false },
   
   // Sales Revenue (4100-4199)
   { id: "4100", name: "Sales Revenue", type: "revenue", level: 2, parentId: "4000", balance: 0, isPostable: false },
@@ -210,7 +210,7 @@ export const mockAccounts: ChartOfAccountsEntry[] = [
   { id: "4250", name: "Miscellaneous Income", type: "revenue", level: 3, parentId: "4200", balance: 1800, isPostable: true },
   
   // EXPENSES (5000-5999)
-  { id: "5000", name: "Expenses", type: "expense", level: 1, parentId: null, balance: 0, isPostable: false },
+  { id: "5000", name: "Expenses", type: "expense", level: 1, parentId: "", balance: 0, isPostable: false },
   
   // Cost of Goods Sold (5100-5199)
   { id: "5100", name: "Cost of Goods Sold", type: "expense", level: 2, parentId: "5000", balance: 0, isPostable: false },
@@ -267,10 +267,10 @@ export const mockLocations = [
 ];
 
 export const mockMovements = [
-  { id: "MOV-001", type: "IN", productId: "P001", productName: "Industrial Widget A", quantity: 100, fromLocation: null, toLocation: "A-01-01", date: "2024-12-01", reference: "PO-001" },
-  { id: "MOV-002", type: "OUT", productId: "P002", productName: "Industrial Widget B", quantity: 25, fromLocation: "A-01-02", toLocation: null, date: "2024-12-02", reference: "SO-001" },
+  { id: "MOV-001", type: "IN", productId: "P001", productName: "Industrial Widget A", quantity: 100, fromLocation: "", toLocation: "A-01-01", date: "2024-12-01", reference: "PO-001" },
+  { id: "MOV-002", type: "OUT", productId: "P002", productName: "Industrial Widget B", quantity: 25, fromLocation: "A-01-02", toLocation: "", date: "2024-12-02", reference: "SO-001" },
   { id: "MOV-003", type: "TRANSFER", productId: "P003", productName: "Component Alpha", quantity: 50, fromLocation: "B-02-01", toLocation: "D-01-01", date: "2024-12-03", reference: "INT-001" },
-  { id: "MOV-004", type: "IN", productId: "P005", productName: "Raw Material X", quantity: 500, fromLocation: null, toLocation: "C-03-01", date: "2024-12-04", reference: "PO-002" },
+  { id: "MOV-004", type: "IN", productId: "P005", productName: "Raw Material X", quantity: 500, fromLocation: "", toLocation: "C-03-01", date: "2024-12-04", reference: "PO-002" },
 ];
 
 export const mockDashboardStats = {
