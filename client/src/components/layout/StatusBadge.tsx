@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-type StatusType = 
+export type StatusType = 
   | "draft" | "confirmed" | "delivered" | "invoiced" 
   | "paid" | "unpaid" | "partial" 
   | "ordered" | "received"

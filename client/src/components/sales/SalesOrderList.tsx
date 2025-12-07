@@ -688,9 +688,9 @@ function SalesOrderDetailInline({ order, companyId, products, onStatusChange, on
   };
 
   const computedSubtotal = orderLines.reduce((sum, line) => {
-    const qty = line.quantity || 0;
+    const qty = line.quantity|| 0;
     const price = parseFloat(line.unitPrice || "0");
-    return sum + (qty * price);
+    return sum + (qty as number * price);
   }, 0);
   const computedTotal = orderLines.reduce((sum, line) => sum + parseFloat(line.lineTotal || "0"), 0);
   const computedTax = computedTotal - computedSubtotal;

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { DataTable, type Column } from "@/components/layout/DataTable";
-import { StatusBadge } from "@/components/layout/StatusBadge";
+import { StatusBadge, StatusType } from "@/components/layout/StatusBadge";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import {
@@ -69,7 +69,7 @@ export function MovementList() {
     { 
       key: "type", 
       header: "Type",
-      render: (item) => <StatusBadge status={item.type} />
+      render: (item) => <StatusBadge status={item.type as StatusType} />
     },
     { key: "productName", header: "Product", sortable: true },
     { key: "quantity", header: "Qty", sortable: true, className: "text-right" },
