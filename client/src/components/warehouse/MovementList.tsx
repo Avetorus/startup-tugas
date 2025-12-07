@@ -21,7 +21,19 @@ import {
 import { Plus, Download } from "lucide-react";
 import { mockMovements, mockProducts, mockLocations } from "@/lib/mockData";
 
-type Movement = typeof mockMovements[0];
+// type Movement = typeof mockMovements[0];
+
+export type Movement = {
+  id: string,
+  type: "IN" | "OUT" | "TRANSFER",
+  productId: string,
+  productName: string,
+  quantity: number,
+  fromLocation: string | null,
+  toLocation: string | null,
+  date: string,
+  reference: string,
+};
 
 export function MovementList() {
   const [movements, setMovements] = useState(mockMovements);

@@ -10,7 +10,18 @@ import { Download, Clock, Users, UserCheck, UserX } from "lucide-react";
 import { mockAttendance } from "@/lib/mockData";
 import { exportToCSV } from "@/lib/export";
 
-type Attendance = typeof mockAttendance[0];
+// type Attendance = typeof mockAttendance[0];
+
+export type Attendance = {
+    id: string;
+    employeeId: string;
+    employeeName: string;
+    date: string;
+    checkIn: string | null;
+    checkOut: string | null;
+    hours: number;
+    status: string;
+}
 
 export function AttendanceList() {
   const [attendance, setAttendance] = useState(mockAttendance);

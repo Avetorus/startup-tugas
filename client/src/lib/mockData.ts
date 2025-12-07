@@ -1,5 +1,8 @@
 // todo: remove mock functionality - this file contains all mock data for the ERP prototype
 
+import { Attendance } from "@/components/hr/AttendanceList";
+import { Movement } from "@/components/warehouse/MovementList";
+
 export const mockCustomers = [
   { id: "C001", name: "Acme Corporation", email: "orders@acme.com", phone: "+1 555-0100", status: "active", totalOrders: 45, totalSpent: 125000 },
   { id: "C002", name: "TechStart Inc.", email: "purchasing@techstart.io", phone: "+1 555-0101", status: "active", totalOrders: 23, totalSpent: 67500 },
@@ -67,7 +70,7 @@ export const mockLeaveRequests = [
   { id: "LR-004", employeeId: "E005", employeeName: "Lisa Wang", type: "vacation", startDate: "2024-12-01", endDate: "2024-12-14", status: "approved", days: 10 },
 ];
 
-export const mockAttendance = [
+export const mockAttendance: Attendance[] = [
   { id: "ATT-001", employeeId: "E001", employeeName: "Sarah Johnson", date: "2024-12-05", checkIn: "08:45", checkOut: "17:30", hours: 8.75, status: "present" },
   { id: "ATT-002", employeeId: "E002", employeeName: "Michael Chen", date: "2024-12-05", checkIn: "07:00", checkOut: "15:30", hours: 8.5, status: "present" },
   { id: "ATT-003", employeeId: "E003", employeeName: "Emily Rodriguez", date: "2024-12-05", checkIn: "09:00", checkOut: "18:00", hours: 9, status: "present" },
@@ -266,7 +269,7 @@ export const mockLocations = [
   { id: "LOC-005", code: "C-03-01", name: "Bulk Storage C, Area 1", zone: "Zone C", type: "bulk", capacity: 5000, used: 2450 },
 ];
 
-export const mockMovements = [
+export const mockMovements: Movement[] = [
   { id: "MOV-001", type: "IN", productId: "P001", productName: "Industrial Widget A", quantity: 100, fromLocation: null, toLocation: "A-01-01", date: "2024-12-01", reference: "PO-001" },
   { id: "MOV-002", type: "OUT", productId: "P002", productName: "Industrial Widget B", quantity: 25, fromLocation: "A-01-02", toLocation: null, date: "2024-12-02", reference: "SO-001" },
   { id: "MOV-003", type: "TRANSFER", productId: "P003", productName: "Component Alpha", quantity: 50, fromLocation: "B-02-01", toLocation: "D-01-01", date: "2024-12-03", reference: "INT-001" },
