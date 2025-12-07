@@ -43,7 +43,6 @@ export function LeaveRequests() {
     const end = new Date(formData.endDate);
     const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
     
-    // todo: remove mock functionality
     const newRequest: LeaveRequest = {
       id: `LR-${String(requests.length + 1).padStart(3, "0")}`,
       employeeId: formData.employeeId,
@@ -80,7 +79,7 @@ export function LeaveRequests() {
     { 
       key: "type", 
       header: "Type",
-      render: (item) => <StatusBadge status={item.type} />
+      render: (item) => <StatusBadge status={item.type as any} />
     },
     { key: "startDate", header: "Start Date", sortable: true },
     { key: "endDate", header: "End Date", sortable: true },
@@ -88,7 +87,9 @@ export function LeaveRequests() {
     { 
       key: "status", 
       header: "Status",
-      render: (item) => <StatusBadge status={item.status as "pending" | "approved" | "rejected"} />
+      render: (item) => (
+        <StatusBadge status={item.status as any} />
+      )
     },
     {
       key: "actions",
