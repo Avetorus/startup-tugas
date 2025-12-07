@@ -10,11 +10,31 @@ import { Download, Clock, Users, UserCheck, UserX } from "lucide-react";
 import { mockAttendance } from "@/lib/mockData";
 import { exportToCSV } from "@/lib/export";
 
-type Attendance = typeof mockAttendance[0];
+/* ---------------------------------------------------------
+   FIXED TYPE - membuat struktur data konsisten & aman
+--------------------------------------------------------- */
+export type AttendanceRecord = {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  date: string;
+  checkIn?: string;
+  checkOut?: string;
+  hours: number;
+  status: "present" | "on-leave" | "absent";
+};
 
 export function AttendanceList() {
-  const [attendance, setAttendance] = useState(mockAttendance);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+  /* ---------------------------------------------------------
+     FIXED - State diberi tipe jelas, tidak pakai union
+  --------------------------------------------------------- */
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>(
+    mockAttendance as AttendanceRecord[]
+  );
+
+  const [selectedDate, setSelectedDate] = useState(
+    new Date().toISOString().split("T")[0]
+  );
 
   const presentCount = attendance.filter(a => a.status === "present").length;
   const onLeaveCount = attendance.filter(a => a.status === "on-leave").length;
@@ -22,86 +42,101 @@ export function AttendanceList() {
 
   const handleCheckIn = (attendanceId: string) => {
     const now = new Date();
-    const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-    setAttendance(attendance.map(a => 
-      a.id === attendanceId ? { ...a, checkIn: time, status: "present" } : a
-    ));
-    console.log("Checked in:", attendanceId, time);
+    const time = `${String(now.getHours()).padStart(2, "0")}:${String(
+      now.getMinutes()
+    ).padStart(2, "0")}`;
+    setAttendance(
+      attendance.map(a =>
+        a.id === attendanceId ? { ...a, checkIn: time, status: "present" } : a
+      )
+    );
   };
 
   const handleCheckOut = (attendanceId: string) => {
     const now = new Date();
-    const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    const time = `${String(now.getHours()).padStart(2, "0")}:${String(
+      now.getMinutes()
+    ).padStart(2, "0")}`;
+
     const record = attendance.find(a => a.id === attendanceId);
     if (record?.checkIn) {
-      const checkInParts = record.checkIn.split(":");
-      const checkInHour = parseInt(checkInParts[0]);
-      const checkInMin = parseInt(checkInParts[1]);
-      const hours = (now.getHours() - checkInHour) + (now.getMinutes() - checkInMin) / 60;
-      setAttendance(attendance.map(a => 
-        a.id === attendanceId ? { ...a, checkOut: time, hours: Math.round(hours * 100) / 100 } : a
-      ));
-      console.log("Checked out:", attendanceId, time);
+      const [h, m] = record.checkIn.split(":").map(Number);
+      const hours =
+        now.getHours() - h + (now.getMinutes() - m) / 60;
+
+      setAttendance(
+        attendance.map(a =>
+          a.id === attendanceId
+            ? { ...a, checkOut: time, hours: Math.round(hours * 100) / 100 }
+            : a
+        )
+      );
     }
   };
 
-  const columns: Column<Attendance>[] = [
+  const columns: Column<AttendanceRecord>[] = [
     { key: "employeeName", header: "Employee", sortable: true },
     { key: "date", header: "Date", sortable: true },
-    { 
-      key: "checkIn", 
+    {
+      key: "checkIn",
       header: "Check In",
-      render: (item) => item.checkIn || "-"
+      render: item => item.checkIn || "-"
     },
-    { 
-      key: "checkOut", 
+    {
+      key: "checkOut",
       header: "Check Out",
-      render: (item) => item.checkOut || "-"
+      render: item => item.checkOut || "-"
     },
-    { 
-      key: "hours", 
-      header: "Hours", 
+    {
+      key: "hours",
+      header: "Hours",
       sortable: true,
       className: "text-right",
-      render: (item) => item.hours > 0 ? `${item.hours}h` : "-"
+      render: item => (item.hours > 0 ? `${item.hours}h` : "-")
     },
-    { 
-      key: "status", 
+    {
+      key: "status",
       header: "Status",
-      render: (item) => <StatusBadge status={item.status as "present" | "on-leave" | "absent"} />
+      render: item => (
+        <StatusBadge
+          status={item.status}
+        />
+      )
     },
     {
       key: "actions",
       header: "",
       className: "text-right",
-      render: (item) => (
-        <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+      render: item => (
+        <div
+          className="flex justify-end gap-1"
+          onClick={e => e.stopPropagation()}
+        >
           {!item.checkIn && item.status !== "on-leave" && (
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               onClick={() => handleCheckIn(item.id)}
-              data-testid={`button-checkin-${item.id}`}
             >
               Check In
             </Button>
           )}
           {item.checkIn && !item.checkOut && (
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               variant="outline"
               onClick={() => handleCheckOut(item.id)}
-              data-testid={`button-checkout-${item.id}`}
             >
               Check Out
             </Button>
           )}
         </div>
-      ),
-    },
+      )
+    }
   ];
 
   const handleExport = () => {
     if (attendance.length === 0) return;
+
     exportToCSV(
       attendance.map(a => ({
         employee: a.employeeName,
@@ -129,7 +164,7 @@ export function AttendanceList() {
         title="Attendance"
         description="Track daily attendance"
         actions={
-          <Button variant="outline" onClick={handleExport} data-testid="button-export">
+          <Button variant="outline" onClick={handleExport}>
             <Download className="h-4 w-4 mr-2" />
             Export
           </Button>
@@ -137,21 +172,9 @@ export function AttendanceList() {
       />
 
       <div className="grid md:grid-cols-4 gap-4 mb-6">
-        <StatCard
-          title="Total Employees"
-          value={attendance.length}
-          icon={Users}
-        />
-        <StatCard
-          title="Present Today"
-          value={presentCount}
-          icon={UserCheck}
-        />
-        <StatCard
-          title="On Leave"
-          value={onLeaveCount}
-          icon={UserX}
-        />
+        <StatCard title="Total Employees" value={attendance.length} icon={Users} />
+        <StatCard title="Present Today" value={presentCount} icon={UserCheck} />
+        <StatCard title="On Leave" value={onLeaveCount} icon={UserX} />
         <StatCard
           title="Total Hours"
           value={`${totalHours.toFixed(1)}h`}
@@ -166,9 +189,8 @@ export function AttendanceList() {
             id="date"
             type="date"
             value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
+            onChange={e => setSelectedDate(e.target.value)}
             className="w-40"
-            data-testid="input-date"
           />
         </div>
       </div>

@@ -72,8 +72,9 @@ export const mockAttendance = [
   { id: "ATT-002", employeeId: "E002", employeeName: "Michael Chen", date: "2024-12-05", checkIn: "07:00", checkOut: "15:30", hours: 8.5, status: "present" },
   { id: "ATT-003", employeeId: "E003", employeeName: "Emily Rodriguez", date: "2024-12-05", checkIn: "09:00", checkOut: "18:00", hours: 9, status: "present" },
   { id: "ATT-004", employeeId: "E004", employeeName: "David Kim", date: "2024-12-05", checkIn: "08:30", checkOut: "17:00", hours: 8.5, status: "present" },
-  { id: "ATT-005", employeeId: "E005", employeeName: "Lisa Wang", date: "2024-12-05", checkIn: null, checkOut: null, hours: 0, status: "on-leave" },
-];
+  { id: "ATT-005", employeeId: "E005", employeeName: "Lisa Wang", date: "2024-12-05", checkIn: undefined, checkOut: undefined, hours: 0, status: "on-leave" },
+] as const;
+
 
 // todo: remove mock functionality - Complete Chart of Accounts with hierarchy
 export interface ChartOfAccountsEntry {
