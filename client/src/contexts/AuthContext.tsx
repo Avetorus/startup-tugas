@@ -45,6 +45,12 @@ interface AuthActions {
 
 type AuthContextValue = AuthState & AuthActions;
 
+type LoginRequest = {
+  username : string,
+  password: string,
+  companyId?: string
+}
+
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 const TOKEN_STORAGE_KEY = "unanza_access_token";
@@ -117,16 +123,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [storeTokens]);
 
   const loginMutation = useMutation({
-    mutationFn: async ({ username, password, companyId }: { 
-      username: string; 
-      password: string; 
-      companyId?: string;
-    }) => {
+    mutationFn: async (body: LoginRequest) => {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ username, password, companyId }),
+        body: JSON.stringify(body),
       });
       
       if (!response.ok) {
@@ -136,9 +138,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
       return response.json() as Promise<LoginResponse>;
     },
-    onSuccess: (data) => {
+    onSuccess: (data: LoginResponse) => {
       updateStateFromResponse(data);
-      queryClient.invalidateQueries();
+      queryClient.invalidateQueries(); // user login, invalidate all cache, auto refetch
     },
     onError: (error: Error) => {
       clearTokens();
@@ -177,7 +179,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         canConsolidate: false,
         error: null,
       });
-      queryClient.clear();
+      queryClient.clear(); //user logout clear everything
     },
   });
 
@@ -210,6 +212,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     },
   });
 
+  // ! switch company ! 
   const switchCompanyMutation = useMutation({
     mutationFn: async (companyId: string) => {
       const response = await fetch("/api/auth/switch-company", {
@@ -238,6 +241,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     },
   });
 
+  // refresh access token
   const fetchMe = useCallback(async () => {
     if (!state.accessToken) return;
     
@@ -291,7 +295,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
     };
 
-    const interval = setInterval(checkTokenExpiry, 30000);
+    const interval = setInterval(checkTokenExpiry, 30 );
     return () => clearInterval(interval);
   }, [refreshMutation]);
 
@@ -322,7 +326,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       await switchCompanyMutation.mutateAsync(companyId);
       return true;
     } catch {
-      return false;
+      return false; 
     }
   }, [switchCompanyMutation]);
 

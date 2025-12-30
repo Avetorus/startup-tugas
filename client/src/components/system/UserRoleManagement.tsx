@@ -148,6 +148,11 @@ export function UserRoleManagement() {
     queryKey: ["/api/companies"],
   });
 
+  // Fetch users
+  // const { data: users = [] } = useQuery<User[]>({
+  //   queryKey: ["/api/users/e776519a-504e-4eee-8b2f-8b40f1d9b2a0/companies"],
+  // });
+
   // Fetch user-company assignments
   const { data: assignments = [], isLoading: assignmentsLoading } = useQuery<UserCompanyRole[]>({
     queryKey: ["/api/user-company-roles"],

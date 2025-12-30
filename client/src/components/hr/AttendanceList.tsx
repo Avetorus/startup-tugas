@@ -9,6 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Download, Clock, Users, UserCheck, UserX } from "lucide-react";
 import { mockAttendance } from "@/lib/mockData";
 import { exportToCSV } from "@/lib/export";
+import { useQuery } from "@tanstack/react-query";
+import { Employee } from "@shared/schema";
+import { useCompany } from "@/contexts/CompanyContext";
 
 // type Attendance = typeof mockAttendance[0];
 
@@ -24,12 +27,18 @@ export type Attendance = {
 }
 
 export function AttendanceList() {
-  const [attendance, setAttendance] = useState(mockAttendance);
+  const { activeCompany } = useCompany();
+  const [attendance, setAttendance] = useState(mockAttendance); // change
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
 
   const presentCount = attendance.filter(a => a.status === "present").length;
   const onLeaveCount = attendance.filter(a => a.status === "on-leave").length;
   const totalHours = attendance.reduce((sum, a) => sum + a.hours, 0);
+
+  const { data: employees = [], isLoading } = useQuery<Employee[]>({
+      queryKey: ["/api/companies", activeCompany?.id, "employees"],
+      enabled: !!activeCompany?.id,
+  });
 
   const handleCheckIn = (attendanceId: string) => {
     const now = new Date();

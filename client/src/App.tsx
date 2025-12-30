@@ -138,14 +138,14 @@ function ProtectedRoutes() {
   );
 }
 
-function AuthenticatedApp() {
+function AuthenticatedApp() { // main app
   const style = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "3rem",
   };
 
   return (
-    <CompanyProvider>
+    <CompanyProvider> {/* x */}
       <SidebarProvider style={style as React.CSSProperties}>
         <div className="flex h-screen w-full">
           <AppSidebar />
@@ -153,7 +153,7 @@ function AuthenticatedApp() {
             <header className="flex items-center justify-between gap-2 p-3 border-b shrink-0">
               <div className="flex items-center gap-2">
                 <SidebarTrigger data-testid="button-sidebar-toggle" />
-                <CompanySwitcher />
+                <CompanySwitcher /> {/* x */}
               </div>
               <div className="flex items-center gap-2">
                 <ThemeToggle />
@@ -161,7 +161,7 @@ function AuthenticatedApp() {
               </div>
             </header>
             <main className="flex-1 overflow-auto p-6">
-              <ProtectedRoutes />
+              <ProtectedRoutes /> 
             </main>
           </div>
         </div>
@@ -221,11 +221,11 @@ function AppRouter() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <AuthProvider>
-          <TooltipProvider>
+      <ThemeProvider> {/* ui */}
+        <AuthProvider> {/* 90% */}
+          <TooltipProvider> {/* ui */}
             <AppRouter />
-            <Toaster />
+            <Toaster /> {/* ui */}
           </TooltipProvider>
         </AuthProvider>
       </ThemeProvider>
