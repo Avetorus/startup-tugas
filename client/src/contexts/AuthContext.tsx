@@ -414,7 +414,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       await switchCompanyMutation.mutateAsync(companyId);
       return true;
     } catch {
-      return false;
+      return false; 
     }
   }, [switchCompanyMutation, state, queryClient]);
 
