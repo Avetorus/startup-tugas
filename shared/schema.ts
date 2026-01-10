@@ -1242,7 +1242,7 @@ export interface CompanyContext {
 
 export interface CompanyHierarchyNode {
   company: Company;
-  children: CompanyHierarchyNode[];
+  children: CompanyHierarchyNode[];  
   level: number;
 }
 

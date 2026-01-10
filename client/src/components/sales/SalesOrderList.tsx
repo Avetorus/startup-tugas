@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
 import { DataTable, type Column } from "@/components/layout/DataTable";
 import { StatusBadge } from "@/components/layout/StatusBadge";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -13,171 +12,117 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Download, Eye, Edit, Trash2 } from "lucide-react";
-import { useCompany } from "@/contexts/CompanyContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { SalesOrder, Customer, Product, InsertSalesOrder, SalesOrderLine } from "@shared/schema";
+import { useMockData } from "@/lib/MockDataContext";
 
-interface SalesOrderDisplay extends SalesOrder {
+// Types for display
+interface SalesOrderDisplay {
+  id: string;
+  companyId: string;
+  orderNumber: string;
+  customerId: string;
+  orderDate: string;
+  requiredDate?: string;
+  status: string;
+  subtotal: string;
+  taxAmount: string;
+  total: string;
   customerName: string;
   itemCount: number;
 }
 
+interface SalesOrderLineDisplay {
+  id: string;
+  salesOrderId: string;
+  productId: string;
+  lineNumber?: number;
+  quantity: number;
+  unitPrice: string;
+  lineTotal: string;
+}
+
 export function SalesOrderList() {
-  const { activeCompany } = useCompany();
+  const { activeCompany } = useAuth();
   const { toast } = useToast();
+  const { salesOrders, salesOrderLines, customers, products, warehouses, locations, addSalesOrder, updateSalesOrder, deleteSalesOrder, addSalesOrderLines, adjustStock, addInvoice, addJournalEntry } = useMockData();
   const [selectedOrder, setSelectedOrder] = useState<SalesOrderDisplay | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<SalesOrderDisplay | null>(null);
+  const [isPending, setIsPending] = useState(false);
+  const [ordersLoading] = useState(false);
 
-  const { data: orders = [], isLoading: ordersLoading } = useQuery<SalesOrder[]>({
-    queryKey: ["/api/companies", activeCompany?.id, "sales-orders"],
-    enabled: !!activeCompany?.id,
-  });
-
-  const { data: customers = [] } = useQuery<Customer[]>({
-    queryKey: ["/api/companies", activeCompany?.id, "customers"],
-    enabled: !!activeCompany?.id,
-  });
-
-  const { data: products = [] } = useQuery<Product[]>({
-    queryKey: ["/api/companies", activeCompany?.id, "products"],
-    enabled: !!activeCompany?.id,
-  });
-
-  const ordersWithCustomers: SalesOrderDisplay[] = orders.map(order => ({
-    ...order,
-    customerName: customers.find(c => c.id === order.customerId)?.name || "Unknown Customer",
-    itemCount: 0,
+  // Map global data to display format
+  const ordersWithCustomers: SalesOrderDisplay[] = salesOrders.map(o => ({
+    id: o.id,
+    companyId: o.companyId,
+    orderNumber: o.orderNumber,
+    customerId: o.customerId,
+    orderDate: o.orderDate,
+    status: o.status,
+    subtotal: o.subtotal.toString(),
+    taxAmount: o.taxAmount.toString(),
+    total: o.total.toString(),
+    customerName: customers.find(c => c.id === o.customerId)?.name || "Unknown Customer",
+    itemCount: salesOrderLines.filter(l => l.salesOrderId === o.id).length,
   }));
 
-  const createMutation = useMutation({
-    mutationFn: async (data: Partial<InsertSalesOrder>) => {
-      const orderNumber = `SO-${String(Date.now()).slice(-6)}`;
-      return apiRequest("POST", `/api/companies/${activeCompany?.id}/sales-orders`, {
-        ...data,
-        orderNumber,
-        companyId: activeCompany?.id,
+  const orderLinesDisplay: SalesOrderLineDisplay[] = salesOrderLines.map((l, i) => ({
+    id: l.id,
+    salesOrderId: l.salesOrderId,
+    productId: l.productId,
+    lineNumber: l.lineNumber,
+    quantity: l.quantity,
+    unitPrice: l.unitPrice.toString(),
+    lineTotal: l.lineTotal.toString(),
+  }));
+
+  const productsDisplay = products.map(p => ({ id: p.id, name: p.name, price: p.sellingPrice.toString() }));
+
+  interface OrderLineData {
+    productId: string;
+    quantity: number;
+    unitPrice: number;
+    lineTotal: number;
+  }
+
+  const handleCreateOrder = (orderData: { 
+    customerId: string; 
+    subtotal?: string; 
+    taxAmount?: string; 
+    total?: string;
+    lines?: OrderLineData[];
+  }) => {
+    setIsPending(true);
+    setTimeout(() => {
+      const newOrder = addSalesOrder({
+        companyId: activeCompany?.id || "comp-002",
+        orderNumber: `SO-${String(Date.now()).slice(-6)}`,
+        customerId: orderData.customerId || "",
+        orderDate: new Date().toISOString().split("T")[0],
+        status: "draft",
+        subtotal: parseFloat(orderData.subtotal || "0"),
+        taxAmount: parseFloat(orderData.taxAmount || "0"),
+        total: parseFloat(orderData.total || "0"),
       });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "sales-orders"] });
+      
+      // Save order lines if provided
+      if (orderData.lines && orderData.lines.length > 0) {
+        addSalesOrderLines(orderData.lines.map((line, idx) => ({
+          salesOrderId: newOrder.id,
+          productId: line.productId,
+          lineNumber: idx + 1,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          lineTotal: line.lineTotal,
+        })));
+      }
+      
       toast({ title: "Sales order created successfully" });
+      setIsPending(false);
       setIsFormOpen(false);
-    },
-    onError: () => {
-      toast({ title: "Failed to create sales order", variant: "destructive" });
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<SalesOrder> }) => {
-      return apiRequest("PATCH", `/api/companies/${activeCompany?.id}/sales-orders/${id}`, data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "sales-orders"] });
-      toast({ title: "Sales order updated successfully" });
-      setIsFormOpen(false);
-      setIsDetailOpen(false);
-    },
-    onError: () => {
-      toast({ title: "Failed to update sales order", variant: "destructive" });
-    },
-  });
-
-  // Workflow mutation: Confirm order (reserves stock)
-  const confirmOrderMutation = useMutation({
-    mutationFn: async (orderId: string) => {
-      const response = await apiRequest("POST", `/api/companies/${activeCompany?.id}/sales-orders/${orderId}/confirm`);
-      return response.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "sales-orders"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "stock-levels"] });
-      toast({ 
-        title: "Order Confirmed", 
-        description: `Stock reserved for ${data.reservations?.length || 0} line items` 
-      });
-      setIsDetailOpen(false);
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to confirm order", 
-        description: error.message || "Check stock availability",
-        variant: "destructive" 
-      });
-    },
-  });
-
-  // Workflow mutation: Deliver order (reduces stock, creates delivery, COGS journal entry)
-  const deliverOrderMutation = useMutation({
-    mutationFn: async (orderId: string) => {
-      const response = await apiRequest("POST", `/api/companies/${activeCompany?.id}/sales-orders/${orderId}/deliver`);
-      return response.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "sales-orders"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "stock-levels"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "stock-movements"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "deliveries"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "journal-entries"] });
-      toast({ 
-        title: "Delivery Created", 
-        description: `Delivery ${data.delivery?.deliveryNumber || ''} created with inventory and COGS recorded` 
-      });
-      setIsDetailOpen(false);
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to create delivery", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
-  });
-
-  // Workflow mutation: Invoice order (creates invoice, AR ledger, revenue journal entry)
-  const invoiceOrderMutation = useMutation({
-    mutationFn: async (orderId: string) => {
-      const response = await apiRequest("POST", `/api/companies/${activeCompany?.id}/sales-orders/${orderId}/invoice`);
-      return response.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "sales-orders"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "invoices"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "ar-ledger"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "journal-entries"] });
-      toast({ 
-        title: "Invoice Created", 
-        description: `Invoice ${data.invoice?.invoiceNumber || ''} created and AR recorded` 
-      });
-      setIsDetailOpen(false);
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to create invoice", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      return apiRequest("DELETE", `/api/companies/${activeCompany?.id}/sales-orders/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "sales-orders"] });
-      toast({ title: "Sales order deleted successfully" });
-    },
-    onError: () => {
-      toast({ title: "Failed to delete sales order", variant: "destructive" });
-    },
-  });
-
-  const handleCreateOrder = (orderData: Partial<InsertSalesOrder>) => {
-    createMutation.mutate(orderData);
+    }, 500);
   };
 
   const handleViewOrder = (order: SalesOrderDisplay) => {
@@ -191,30 +136,60 @@ export function SalesOrderList() {
   };
 
   const handleDeleteOrder = (orderId: string) => {
-    deleteMutation.mutate(orderId);
-  };
-
-  const handleStatusChange = (orderId: string, newStatus: string) => {
-    // Use workflow endpoints for status transitions
-    switch (newStatus) {
-      case "confirmed":
-        confirmOrderMutation.mutate(orderId);
-        break;
-      case "delivered":
-        deliverOrderMutation.mutate(orderId);
-        break;
-      case "invoiced":
-        invoiceOrderMutation.mutate(orderId);
-        break;
-      default:
-        // Fallback to simple update for non-workflow status changes
-        updateMutation.mutate({ id: orderId, data: { status: newStatus } });
+    if (confirm("Are you sure you want to delete this order?")) {
+      deleteSalesOrder(orderId);
+      toast({ title: "Sales order deleted successfully" });
     }
   };
 
-  const isWorkflowPending = confirmOrderMutation.isPending || 
-    deliverOrderMutation.isPending || 
-    invoiceOrderMutation.isPending;
+  const handleStatusChange = (orderId: string, newStatus: string) => {
+    setIsPending(true);
+    setTimeout(() => {
+      const order = salesOrders.find(o => o.id === orderId);
+      
+      // Note: Stock adjustment is handled by the Delivery workflow, not here
+      // This allows for proper pick/pack/ship tracking in the warehouse module
+      
+      // If invoiced, automatically create an invoice
+      if (newStatus === "invoiced" && order) {
+        const dueDate = new Date();
+        dueDate.setDate(dueDate.getDate() + 30); // 30-day payment terms
+        
+        addInvoice({
+          companyId: order.companyId,
+          invoiceNumber: `INV-${Date.now().toString().slice(-6)}`,
+          invoiceType: "customer",
+          customerId: order.customerId,
+          salesOrderId: orderId,
+          invoiceDate: new Date().toISOString().split("T")[0],
+          dueDate: dueDate.toISOString().split("T")[0],
+          status: "unpaid",
+          subtotal: order.subtotal,
+          taxAmount: order.taxAmount,
+          total: order.total,
+          amountPaid: 0,
+          amountDue: order.total,
+        });
+      }
+      
+      updateSalesOrder(orderId, { status: newStatus });
+      
+      const statusMessages: Record<string, string> = {
+        confirmed: "Order Confirmed - Stock reserved",
+        delivered: "Delivery Created - Inventory and COGS recorded",
+        invoiced: "Invoice Created - AR recorded",
+      };
+      
+      toast({ 
+        title: statusMessages[newStatus] || "Status updated",
+        description: `Order status changed to ${newStatus}` 
+      });
+      setIsPending(false);
+      setIsDetailOpen(false);
+    }, 500);
+  };
+
+  const isWorkflowPending = isPending;
 
   const handleExport = () => {
     const csv = [
@@ -283,7 +258,7 @@ export function SalesOrderList() {
             variant="ghost" 
             size="icon" 
             onClick={() => handleDeleteOrder(item.id)}
-            disabled={deleteMutation.isPending}
+            disabled={isPending}
             data-testid={`button-delete-${item.id}`}
           >
             <Trash2 className="h-4 w-4" />
@@ -347,7 +322,7 @@ export function SalesOrderList() {
             products={products}
             onSubmit={handleCreateOrder}
             onCancel={() => setIsFormOpen(false)}
-            isPending={createMutation.isPending}
+            isPending={isPending}
           />
         </DialogContent>
       </Dialog>
@@ -365,6 +340,7 @@ export function SalesOrderList() {
               order={selectedOrder}
               companyId={activeCompany.id}
               products={products}
+              salesOrderLines={orderLinesDisplay}
               onStatusChange={handleStatusChange}
               onClose={() => setIsDetailOpen(false)}
               isPending={isWorkflowPending}
@@ -460,11 +436,23 @@ function SalesOrderFormInline({ order, customers, products, onSubmit, onCancel, 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerId) return;
+    
+    // Convert lines to the format expected by the handler
+    const orderLines = lines
+      .filter(line => line.productId) // Only include lines with a product selected
+      .map(line => ({
+        productId: line.productId,
+        quantity: line.quantity,
+        unitPrice: line.price,
+        lineTotal: line.total,
+      }));
+    
     onSubmit({
       customerId,
       subtotal: String(subtotal),
       taxAmount: String(totalTax),
       total: String(grandTotal),
+      lines: orderLines,
     });
   };
 
@@ -616,6 +604,7 @@ interface SalesOrderDetailInlineProps {
   order: SalesOrderDisplay;
   companyId: string;
   products: Product[];
+  salesOrderLines: SalesOrderLineDisplay[];
   onStatusChange: (orderId: string, newStatus: string) => void;
   onClose: () => void;
   isPending: boolean;
@@ -628,11 +617,10 @@ const orderSteps = [
   { id: "invoiced", label: "Invoiced" },
 ];
 
-function SalesOrderDetailInline({ order, companyId, products, onStatusChange, onClose, isPending }: SalesOrderDetailInlineProps) {
-  const { data: orderLines = [], isLoading: linesLoading } = useQuery<SalesOrderLine[]>({
-    queryKey: ["/api/companies", companyId, "sales-orders", order.id, "lines"],
-    enabled: !!companyId && !!order.id,
-  });
+function SalesOrderDetailInline({ order, companyId, products, salesOrderLines, onStatusChange, onClose, isPending }: SalesOrderDetailInlineProps) {
+  // Filter order lines for this order
+  const orderLines = salesOrderLines.filter(l => l.salesOrderId === order.id);
+  const linesLoading = false;
 
   const getProductName = (productId: string) => {
     return products.find(p => p.id === productId)?.name || "Unknown Product";

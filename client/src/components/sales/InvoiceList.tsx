@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
 import { DataTable, type Column } from "@/components/layout/DataTable";
 import { StatusBadge } from "@/components/layout/StatusBadge";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -15,75 +14,59 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Download, Eye, DollarSign, Printer, Loader2 } from "lucide-react";
-import { useCompany } from "@/contexts/CompanyContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
 import { exportToCSV } from "@/lib/export";
-import type { Invoice, Customer } from "@shared/schema";
+import { useMockData } from "@/lib/MockDataContext";
 
-interface InvoiceDisplay extends Invoice {
+// Types for display
+interface InvoiceDisplay {
+  id: string;
+  companyId: string;
+  invoiceNumber: string;
+  invoiceType: string;
+  customerId: string;
+  invoiceDate: string;
+  dueDate: string;
+  status: string;
+  subtotal: string;
+  taxAmount: string;
+  total: string;
+  amountPaid: string;
+  amountDue: string;
   customerName: string;
 }
 
 export function InvoiceList() {
-  const { activeCompany } = useCompany();
+  const { activeCompany } = useAuth();
   const { toast } = useToast();
+  const { invoices: globalInvoices, customers, updateInvoice, addJournalEntry } = useMockData();
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceDisplay | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState("");
+  const [isLoading] = useState(false);
+  const [isPending, setIsPending] = useState(false);
 
-  const { data: invoices = [], isLoading } = useQuery<Invoice[]>({
-    queryKey: ["/api/companies", activeCompany?.id, "invoices"],
-    enabled: !!activeCompany?.id,
-  });
-
-  const { data: customers = [] } = useQuery<Customer[]>({
-    queryKey: ["/api/companies", activeCompany?.id, "customers"],
-    enabled: !!activeCompany?.id,
-  });
-
-  // Filter for customer (AR) invoices - backend uses "customer" type
-  const invoicesWithCustomers: InvoiceDisplay[] = invoices
+  // Map global data to display format - filter for customer (AR) invoices
+  const invoicesWithCustomers: InvoiceDisplay[] = globalInvoices
     .filter(inv => inv.invoiceType === "customer")
-    .map(invoice => ({
-      ...invoice,
-      customerName: customers.find(c => c.id === invoice.customerId)?.name || "Unknown Customer",
+    .map(inv => ({
+      id: inv.id,
+      companyId: inv.companyId,
+      invoiceNumber: inv.invoiceNumber,
+      invoiceType: inv.invoiceType,
+      customerId: inv.customerId || "",
+      invoiceDate: inv.invoiceDate,
+      dueDate: inv.dueDate,
+      status: inv.status,
+      subtotal: inv.subtotal.toString(),
+      taxAmount: inv.taxAmount.toString(),
+      total: inv.total.toString(),
+      amountPaid: inv.amountPaid.toString(),
+      amountDue: inv.amountDue.toString(),
+      customerName: customers.find(c => c.id === inv.customerId)?.name || "Unknown Customer",
     }));
-
-  // Workflow mutation: Receive customer payment
-  const receivePaymentMutation = useMutation({
-    mutationFn: async ({ customerId, invoiceIds, amount }: { customerId: string; invoiceIds: string[]; amount: number }) => {
-      const response = await apiRequest("POST", `/api/companies/${activeCompany?.id}/payments/receive`, {
-        customerId,
-        invoiceIds,
-        amount,
-        paymentMethod: "bank_transfer",
-      });
-      return response.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "invoices"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "ar-ledger"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "payments"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "journal-entries"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "sales-orders"] });
-      toast({ 
-        title: "Payment Received", 
-        description: `Payment ${data.payment?.paymentNumber || ''} recorded and AR updated` 
-      });
-      setIsPaymentOpen(false);
-      setSelectedInvoice(null);
-      setPaymentAmount("");
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to record payment", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
-  });
 
   const handleViewInvoice = (invoice: InvoiceDisplay) => {
     setSelectedInvoice(invoice);
@@ -92,8 +75,7 @@ export function InvoiceList() {
 
   const handleOpenPayment = (invoice: InvoiceDisplay) => {
     setSelectedInvoice(invoice);
-    // Normalize to string since schema may return numbers
-    const balance = invoice.amountDue ?? invoice.total ?? 0;
+    const balance = invoice.amountDue ?? invoice.total ?? "0";
     setPaymentAmount(String(balance));
     setIsPaymentOpen(true);
   };
@@ -126,11 +108,43 @@ export function InvoiceList() {
       });
       return;
     }
-    receivePaymentMutation.mutate({
-      customerId: selectedInvoice.customerId,
-      invoiceIds: [selectedInvoice.id],
-      amount,
-    });
+    
+    // Mock payment processing
+    setIsPending(true);
+    setTimeout(() => {
+      const newAmountPaid = parseFloat(selectedInvoice.amountPaid) + amount;
+      const newAmountDue = parseFloat(selectedInvoice.total) - newAmountPaid;
+      const newStatus = newAmountDue <= 0 ? "paid" : newAmountDue < parseFloat(selectedInvoice.total) ? "partial" : "unpaid";
+      
+      updateInvoice(selectedInvoice.id, { 
+        amountPaid: newAmountPaid, 
+        amountDue: newAmountDue, 
+        status: newStatus 
+      });
+      
+      // Create journal entry: DR Cash, CR Accounts Receivable
+      addJournalEntry({
+        companyId: selectedInvoice.companyId,
+        date: new Date().toISOString().split("T")[0],
+        description: `Payment received - Invoice ${selectedInvoice.invoiceNumber}`,
+        referenceType: "PMT",
+        referenceId: selectedInvoice.id,
+        status: "posted",
+        lines: [
+          { accountId: "acc-1000", accountCode: "1000", accountName: "Cash/Bank", debit: amount, credit: 0 },
+          { accountId: "acc-1100", accountCode: "1100", accountName: "Accounts Receivable", debit: 0, credit: amount },
+        ]
+      });
+      
+      toast({ 
+        title: "Payment Received", 
+        description: `Payment of Rp ${amount.toLocaleString()} recorded and AR updated` 
+      });
+      setIsPending(false);
+      setIsPaymentOpen(false);
+      setSelectedInvoice(null);
+      setPaymentAmount("");
+    }, 500);
   };
 
   const handlePrint = () => {
@@ -182,7 +196,7 @@ export function InvoiceList() {
               variant="ghost" 
               size="icon" 
               onClick={() => handleOpenPayment(item)}
-              disabled={receivePaymentMutation.isPending}
+              disabled={isPending}
               data-testid={`button-pay-${item.id}`}
             >
               <DollarSign className="h-4 w-4" />
@@ -298,10 +312,10 @@ export function InvoiceList() {
                 </Button>
                 <Button 
                   onClick={handleRecordPayment} 
-                  disabled={receivePaymentMutation.isPending || !paymentAmount}
+                  disabled={isPending || !paymentAmount}
                   data-testid="button-confirm-payment"
                 >
-                  {receivePaymentMutation.isPending ? (
+                  {isPending ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       Processing...

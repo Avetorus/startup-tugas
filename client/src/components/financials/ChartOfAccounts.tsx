@@ -1,5 +1,4 @@
 import { useState, useMemo } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,9 +32,22 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Account } from "@shared/schema";
+import { useMockData } from "@/lib/MockDataContext";
+
+// Types for display
+interface AccountDisplay {
+  id: string;
+  companyId: string;
+  accountCode: string;
+  name: string;
+  accountType: string;
+  parentId: string | null;
+  level: number;
+  balance: string;
+  isPostable: boolean;
+  isActive: boolean;
+}
 
 const accountTypeColors: Record<string, string> = {
   asset: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
@@ -48,13 +60,16 @@ const accountTypeColors: Record<string, string> = {
 export function ChartOfAccounts() {
   const { activeCompany } = useAuth();
   const { toast } = useToast();
+  const { accounts: globalAccounts, addAccount, updateAccount, deleteAccount } = useMockData();
   const companyId = activeCompany?.id;
 
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
+  const [editingAccount, setEditingAccount] = useState<AccountDisplay | null>(null);
   const [expandedAccounts, setExpandedAccounts] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
+  const [isLoading] = useState(false);
+  const [isPending, setIsPending] = useState(false);
 
   const [formData, setFormData] = useState({
     accountCode: "",
@@ -65,53 +80,69 @@ export function ChartOfAccounts() {
     isPostable: true,
   });
 
-  const { data: accounts = [], isLoading } = useQuery<Account[]>({
-    queryKey: ["/api/companies", companyId, "accounts"],
-    enabled: !!companyId,
-  });
+  // Map global accounts to display format
+  const accounts: AccountDisplay[] = globalAccounts.map(acc => ({
+    id: acc.id,
+    companyId: acc.companyId,
+    accountCode: acc.accountCode,
+    name: acc.name,
+    accountType: acc.accountType,
+    parentId: acc.parentId || null,
+    level: acc.level,
+    balance: (acc.balance || 0).toString(),
+    isPostable: acc.isPostable,
+    isActive: acc.isActive,
+  }));
 
-  const createMutation = useMutation({
-    mutationFn: async (data: Omit<typeof formData, "parentId"> & { parentId: string | null }) => {
-      const response = await apiRequest("POST", `/api/companies/${companyId}/accounts`, data);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "accounts"] });
-      toast({ title: "Account created successfully" });
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const submitData = {
+      ...formData,
+      parentId: formData.parentId === "__none__" ? null : formData.parentId,
+    };
+    
+    setIsPending(true);
+    setTimeout(() => {
+      if (editingAccount) {
+        updateAccount(editingAccount.id, {
+          accountCode: submitData.accountCode,
+          name: submitData.name,
+          accountType: submitData.accountType,
+          parentId: submitData.parentId,
+          level: submitData.level,
+          isPostable: submitData.isPostable,
+        });
+        toast({ title: "Account updated successfully" });
+      } else {
+        addAccount({
+          companyId: companyId || "comp-002",
+          accountCode: submitData.accountCode,
+          name: submitData.name,
+          accountType: submitData.accountType,
+          parentId: submitData.parentId,
+          level: submitData.level,
+          balance: 0,
+          isPostable: submitData.isPostable,
+          isActive: true,
+        });
+        toast({ title: "Account created successfully" });
+      }
+      setIsPending(false);
       setIsFormOpen(false);
-    },
-    onError: () => {
-      toast({ title: "Failed to create account", variant: "destructive" });
-    },
-  });
+    }, 500);
+  };
 
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<Account> }) => {
-      const response = await apiRequest("PATCH", `/api/companies/${companyId}/accounts/${id}`, data);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "accounts"] });
-      toast({ title: "Account updated successfully" });
-      setIsFormOpen(false);
-    },
-    onError: () => {
-      toast({ title: "Failed to update account", variant: "destructive" });
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/companies/${companyId}/accounts/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "accounts"] });
-      toast({ title: "Account deleted successfully" });
-    },
-    onError: () => {
+  const handleDeleteAccount = (accountId: string) => {
+    const hasChildren = accounts.some(a => a.parentId === accountId);
+    if (hasChildren) {
       toast({ title: "Cannot delete account with child accounts", variant: "destructive" });
-    },
-  });
+      return;
+    }
+    if (confirm("Are you sure you want to delete this account?")) {
+      deleteAccount(accountId);
+      toast({ title: "Account deleted successfully" });
+    }
+  };
 
   const toggleExpand = (accountId: string) => {
     setExpandedAccounts((prev) => {
@@ -150,29 +181,6 @@ export function ChartOfAccounts() {
       setFormData({ accountCode: "", name: "", accountType: "asset", level: 3, parentId: "__none__", isPostable: true });
     }
     setIsFormOpen(true);
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const submitData = {
-      ...formData,
-      parentId: formData.parentId === "__none__" ? null : formData.parentId,
-    };
-    
-    if (editingAccount) {
-      updateMutation.mutate({ id: editingAccount.id, data: submitData });
-    } else {
-      createMutation.mutate(submitData);
-    }
-  };
-
-  const handleDeleteAccount = (accountId: string) => {
-    const hasChildren = accounts.some(a => a.parentId === accountId);
-    if (hasChildren) {
-      toast({ title: "Cannot delete account with child accounts", variant: "destructive" });
-      return;
-    }
-    deleteMutation.mutate(accountId);
   };
 
   const getChildAccounts = (parentId: string | null): Account[] => {
@@ -290,7 +298,7 @@ export function ChartOfAccounts() {
                 variant="ghost"
                 size="icon"
                 onClick={() => handleDeleteAccount(account.id)}
-                disabled={hasChildren || deleteMutation.isPending}
+                disabled={hasChildren || isPending}
                 data-testid={`button-delete-${account.id}`}
               >
                 <Trash2 className="h-4 w-4" />
@@ -602,10 +610,10 @@ export function ChartOfAccounts() {
               </Button>
               <Button 
                 type="submit" 
-                disabled={createMutation.isPending || updateMutation.isPending}
+                disabled={isPending}
                 data-testid="button-save"
               >
-                {(createMutation.isPending || updateMutation.isPending) && (
+                {isPending && (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 )}
                 {editingAccount ? "Update" : "Create"}

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
 import { DataTable, type Column } from "@/components/layout/DataTable";
 import { StatusBadge } from "@/components/layout/StatusBadge";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -22,18 +21,40 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Download, Edit, Trash2, Warehouse, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { exportToCSV } from "@/lib/export";
-import type { Warehouse as WarehouseType } from "@shared/schema";
+import { useMockData, type Warehouse as WarehouseType } from "@/lib/MockDataContext";
+
+// Extended type for form display
+interface WarehouseDisplay extends WarehouseType {
+  warehouseType: "standard" | "transit" | "virtual";
+  state: string | null;
+  country: string | null;
+  postalCode: string | null;
+  allowNegativeStock: boolean;
+  createdAt?: Date;
+}
 
 export function WarehouseList() {
   const { activeCompany } = useAuth();
   const { toast } = useToast();
+  const { warehouses, addWarehouse, updateWarehouse, deleteWarehouse } = useMockData();
   const companyId = activeCompany?.id;
 
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingWarehouse, setEditingWarehouse] = useState<WarehouseType | null>(null);
+  const [editingWarehouse, setEditingWarehouse] = useState<WarehouseDisplay | null>(null);
+  const [isLoading] = useState(false);
+  const [isPending, setIsPending] = useState(false);
+
+  // Map global warehouses to display format
+  const warehouseList: WarehouseDisplay[] = warehouses.map(w => ({
+    ...w,
+    warehouseType: "standard" as const,
+    state: null,
+    country: null,
+    postalCode: null,
+    allowNegativeStock: false,
+  }));
 
   const [formData, setFormData] = useState({
     code: "",
@@ -46,61 +67,13 @@ export function WarehouseList() {
     allowNegativeStock: false,
   });
 
-  const { data: warehouses = [], isLoading } = useQuery<WarehouseType[]>({
-    queryKey: ["/api/companies", companyId, "warehouses"],
-    enabled: !!companyId,
-  });
-
-  const createMutation = useMutation({
-    mutationFn: async (data: typeof formData) => {
-      const response = await apiRequest("POST", `/api/companies/${companyId}/warehouses`, data);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "warehouses"] });
-      toast({ title: "Warehouse created successfully" });
-      setIsFormOpen(false);
-    },
-    onError: () => {
-      toast({ title: "Failed to create warehouse", variant: "destructive" });
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<WarehouseType> }) => {
-      const response = await apiRequest("PATCH", `/api/companies/${companyId}/warehouses/${id}`, data);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "warehouses"] });
-      toast({ title: "Warehouse updated successfully" });
-      setIsFormOpen(false);
-    },
-    onError: () => {
-      toast({ title: "Failed to update warehouse", variant: "destructive" });
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/companies/${companyId}/warehouses/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "warehouses"] });
-      toast({ title: "Warehouse deleted successfully" });
-    },
-    onError: () => {
-      toast({ title: "Failed to delete warehouse", variant: "destructive" });
-    },
-  });
-
-  const handleOpenForm = (warehouse?: WarehouseType) => {
+  const handleOpenForm = (warehouse?: WarehouseDisplay) => {
     if (warehouse) {
       setEditingWarehouse(warehouse);
       setFormData({
         code: warehouse.code,
         name: warehouse.name,
-        warehouseType: (warehouse.warehouseType as "standard" | "transit" | "virtual") || "standard",
+        warehouseType: warehouse.warehouseType || "standard",
         address: warehouse.address || "",
         city: warehouse.city || "",
         state: warehouse.state || "",
@@ -125,20 +98,43 @@ export function WarehouseList() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingWarehouse) {
-      updateMutation.mutate({ id: editingWarehouse.id, data: formData });
-    } else {
-      createMutation.mutate(formData);
-    }
+    setIsPending(true);
+
+    setTimeout(() => {
+      if (editingWarehouse) {
+        // Update existing warehouse via global context
+        updateWarehouse(editingWarehouse.id, {
+          code: formData.code,
+          name: formData.name,
+          address: formData.address,
+          city: formData.city,
+        });
+        toast({ title: "Warehouse updated successfully" });
+      } else {
+        // Create new warehouse via global context
+        addWarehouse({
+          companyId: companyId || "comp-002",
+          code: formData.code,
+          name: formData.name,
+          address: formData.address,
+          city: formData.city,
+          isActive: true,
+        });
+        toast({ title: "Warehouse created successfully" });
+      }
+      setIsPending(false);
+      setIsFormOpen(false);
+    }, 500);
   };
 
   const handleDelete = (warehouseId: string) => {
     if (confirm("Are you sure you want to delete this warehouse?")) {
-      deleteMutation.mutate(warehouseId);
+      deleteWarehouse(warehouseId);
+      toast({ title: "Warehouse deleted successfully" });
     }
   };
 
-  const columns: Column<WarehouseType>[] = [
+  const columns: Column<WarehouseDisplay>[] = [
     { key: "code", header: "Code", sortable: true },
     { key: "name", header: "Name", sortable: true },
     { 
@@ -147,7 +143,7 @@ export function WarehouseList() {
       sortable: true,
       render: (item) => (
         <StatusBadge 
-          status={(item.warehouseType || "standard") as "standard" | "transit" | "virtual"} 
+          status={item.warehouseType || "standard"} 
         />
       ),
     },
@@ -179,15 +175,15 @@ export function WarehouseList() {
   ];
 
   const handleExport = () => {
-    if (warehouses.length === 0) {
+    if (warehouseList.length === 0) {
       toast({ title: "No data to export", variant: "destructive" });
       return;
     }
     exportToCSV(
-      warehouses.map(w => ({
+      warehouseList.map(w => ({
         code: w.code,
         name: w.name,
-        type: w.warehouseType,
+        type: w.warehouseType || "standard",
         city: w.city || "",
         state: w.state || "",
         country: w.country || "",
@@ -219,7 +215,7 @@ export function WarehouseList() {
     <div>
       <PageHeader
         title="Warehouses"
-        description={`${warehouses.length} warehouse${warehouses.length !== 1 ? "s" : ""}`}
+        description={`${warehouseList.length} warehouse${warehouseList.length !== 1 ? "s" : ""}`}
         actions={
           <>
             <Button variant="outline" onClick={handleExport} data-testid="button-export">
@@ -234,7 +230,7 @@ export function WarehouseList() {
         }
       />
 
-      {warehouses.length === 0 ? (
+      {warehouseList.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Warehouse className="h-12 w-12 text-muted-foreground mb-4" />
           <h3 className="text-lg font-medium mb-2">No warehouses yet</h3>
@@ -246,7 +242,7 @@ export function WarehouseList() {
         </div>
       ) : (
         <DataTable
-          data={warehouses}
+          data={warehouseList}
           columns={columns}
           searchKey="name"
           searchPlaceholder="Search warehouses..."
@@ -357,10 +353,10 @@ export function WarehouseList() {
               </Button>
               <Button 
                 type="submit" 
-                disabled={createMutation.isPending || updateMutation.isPending}
+                disabled={isPending}
                 data-testid="button-save-warehouse"
               >
-                {(createMutation.isPending || updateMutation.isPending) && (
+                {isPending && (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 )}
                 {editingWarehouse ? "Update" : "Create"}

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
 import { DataTable, type Column } from "@/components/layout/DataTable";
 import { StatusBadge } from "@/components/layout/StatusBadge";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -23,20 +22,60 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Download, Eye, Edit, Trash2, Package, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { exportToCSV } from "@/lib/export";
-import type { Product } from "@shared/schema";
+import { useMockData, type Product as GlobalProduct } from "@/lib/MockDataContext";
+
+// Product display type matching the component's existing structure
+interface ProductDisplay {
+  id: string;
+  companyId: string;
+  sku: string;
+  name: string;
+  description?: string;
+  category?: string;
+  uom: string;
+  price: string;
+  cost: string;
+  minStockLevel: number;
+  maxStockLevel: number;
+  reorderPoint: number;
+  isSellable: boolean;
+  isPurchasable: boolean;
+  isActive: boolean;
+}
 
 export function ProductList() {
   const { activeCompany } = useAuth();
   const { toast } = useToast();
+  const { products: globalProducts, addProduct, updateProduct, deleteProduct } = useMockData();
   const companyId = activeCompany?.id;
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [editingProduct, setEditingProduct] = useState<ProductDisplay | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<ProductDisplay | null>(null);
+  const [isLoading] = useState(false);
+  const [isPending, setIsPending] = useState(false);
+
+  // Map global products to display format
+  const products: ProductDisplay[] = globalProducts.map(p => ({
+    id: p.id,
+    companyId: p.companyId,
+    sku: p.sku,
+    name: p.name,
+    description: p.description,
+    category: p.category,
+    uom: p.uom,
+    price: p.sellingPrice.toString(),
+    cost: p.costPrice.toString(),
+    minStockLevel: p.reorderPoint,
+    maxStockLevel: p.reorderPoint * 5,
+    reorderPoint: p.reorderPoint,
+    isSellable: true,
+    isPurchasable: true,
+    isActive: p.isActive,
+  }));
 
   const [formData, setFormData] = useState({
     sku: "",
@@ -53,55 +92,7 @@ export function ProductList() {
     isPurchasable: true,
   });
 
-  const { data: products = [], isLoading } = useQuery<Product[]>({
-    queryKey: ["/api/companies", companyId, "products"],
-    enabled: !!companyId,
-  });
-
-  const createMutation = useMutation({
-    mutationFn: async (data: typeof formData) => {
-      const response = await apiRequest("POST", `/api/companies/${companyId}/products`, data);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "products"] });
-      toast({ title: "Product created successfully" });
-      setIsFormOpen(false);
-    },
-    onError: () => {
-      toast({ title: "Failed to create product", variant: "destructive" });
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<Product> }) => {
-      const response = await apiRequest("PATCH", `/api/companies/${companyId}/products/${id}`, data);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "products"] });
-      toast({ title: "Product updated successfully" });
-      setIsFormOpen(false);
-    },
-    onError: () => {
-      toast({ title: "Failed to update product", variant: "destructive" });
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/companies/${companyId}/products/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "products"] });
-      toast({ title: "Product deleted successfully" });
-    },
-    onError: () => {
-      toast({ title: "Failed to delete product", variant: "destructive" });
-    },
-  });
-
-  const handleOpenForm = (product?: Product) => {
+  const handleOpenForm = (product?: ProductDisplay) => {
     if (product) {
       setEditingProduct(product);
       setFormData({
@@ -140,25 +131,53 @@ export function ProductList() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingProduct) {
-      updateMutation.mutate({ id: editingProduct.id, data: formData });
-    } else {
-      createMutation.mutate(formData);
-    }
+    setIsPending(true);
+    setTimeout(() => {
+      if (editingProduct) {
+        updateProduct(editingProduct.id, {
+          sku: formData.sku,
+          name: formData.name,
+          description: formData.description,
+          category: formData.category,
+          uom: formData.uom,
+          costPrice: parseFloat(formData.cost) || 0,
+          sellingPrice: parseFloat(formData.price) || 0,
+          reorderPoint: formData.reorderPoint,
+        });
+        toast({ title: "Product updated successfully" });
+      } else {
+        addProduct({
+          companyId: companyId || "comp-002",
+          sku: formData.sku,
+          name: formData.name,
+          description: formData.description,
+          category: formData.category,
+          uom: formData.uom,
+          costPrice: parseFloat(formData.cost) || 0,
+          sellingPrice: parseFloat(formData.price) || 0,
+          reorderPoint: formData.reorderPoint,
+          isActive: true,
+        });
+        toast({ title: "Product created successfully" });
+      }
+      setIsPending(false);
+      setIsFormOpen(false);
+    }, 500);
   };
 
-  const handleViewProduct = (product: Product) => {
+  const handleViewProduct = (product: ProductDisplay) => {
     setSelectedProduct(product);
     setIsDetailOpen(true);
   };
 
   const handleDelete = (productId: string) => {
     if (confirm("Are you sure you want to delete this product?")) {
-      deleteMutation.mutate(productId);
+      deleteProduct(productId);
+      toast({ title: "Product deleted successfully" });
     }
   };
 
-  const columns: Column<Product>[] = [
+  const columns: Column<ProductDisplay>[] = [
     { key: "sku", header: "SKU", sortable: true },
     { key: "name", header: "Name", sortable: true },
     { key: "category", header: "Category", sortable: true },
@@ -447,10 +466,10 @@ export function ProductList() {
               </Button>
               <Button 
                 type="submit" 
-                disabled={createMutation.isPending || updateMutation.isPending}
+                disabled={isPending}
                 data-testid="button-save-product"
               >
-                {(createMutation.isPending || updateMutation.isPending) && (
+                {isPending && (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 )}
                 {editingProduct ? "Update" : "Create"}

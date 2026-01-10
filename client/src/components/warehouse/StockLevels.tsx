@@ -4,47 +4,87 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { StatCard } from "@/components/layout/StatCard";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Download, Package, AlertTriangle, DollarSign, ArrowUpDown } from "lucide-react";
-import { mockProducts } from "@/lib/mockData";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Download, Package, AlertTriangle, DollarSign, ArrowUpDown, Warehouse } from "lucide-react";
+import { useMockData, type StockLevel } from "@/lib/MockDataContext";
 import { cn } from "@/lib/utils";
 
-type Product = typeof mockProducts[0];
+// Display type for table
+interface StockLevelDisplay extends StockLevel {
+  productName: string;
+  productSku: string;
+  warehouseName: string;
+  locationCode: string;
+  costPrice: number;
+  uom: string;
+}
 
 export function StockLevels() {
-  const [products] = useState(mockProducts);
+  const { stockLevels, products, warehouses, locations } = useMockData();
   const [activeTab, setActiveTab] = useState("all");
+  const [selectedWarehouse, setSelectedWarehouse] = useState<string>("all");
 
-  const lowStockProducts = products.filter(p => p.stock < p.minLevel);
-  const totalValue = products.reduce((sum, p) => sum + (p.stock * p.price), 0);
-  const totalItems = products.reduce((sum, p) => sum + p.stock, 0);
+  console.log("StockLevels render - stockLevels:", stockLevels.length, "items", stockLevels.map(s => `${s.productId}:${s.quantity}`));
 
-  const getFilteredProducts = () => {
+  // Map stock levels to display format
+  const stockLevelsDisplay: StockLevelDisplay[] = stockLevels.map(sl => {
+    const product = products.find(p => p.id === sl.productId);
+    const warehouse = warehouses.find(w => w.id === sl.warehouseId);
+    const location = locations.find(l => l.id === sl.locationId);
+    return {
+      ...sl,
+      productName: product?.name || "Unknown Product",
+      productSku: product?.sku || "",
+      warehouseName: warehouse?.name || "Unknown",
+      locationCode: location?.code || "Unknown",
+      costPrice: product?.costPrice || 0,
+      uom: product?.uom || "EA",
+    };
+  });
+
+  // Filter by warehouse
+  const filteredByWarehouse = selectedWarehouse === "all"
+    ? stockLevelsDisplay
+    : stockLevelsDisplay.filter(sl => sl.warehouseId === selectedWarehouse);
+
+  const lowStockItems = filteredByWarehouse.filter(sl => sl.quantity < sl.minLevel);
+  const totalValue = filteredByWarehouse.reduce((sum, sl) => sum + (sl.quantity * sl.costPrice), 0);
+  const totalItems = filteredByWarehouse.reduce((sum, sl) => sum + sl.quantity, 0);
+
+  const getFilteredStockLevels = () => {
     switch (activeTab) {
       case "low":
-        return lowStockProducts;
+        return lowStockItems;
       case "optimal":
-        return products.filter(p => p.stock >= p.minLevel && p.stock <= p.maxLevel);
+        return filteredByWarehouse.filter(sl => sl.quantity >= sl.minLevel && sl.quantity <= sl.maxLevel);
       case "overstock":
-        return products.filter(p => p.stock > p.maxLevel);
+        return filteredByWarehouse.filter(sl => sl.quantity > sl.maxLevel);
       default:
-        return products;
+        return filteredByWarehouse;
     }
   };
 
-  const columns: Column<Product>[] = [
-    { key: "sku", header: "SKU", sortable: true },
-    { key: "name", header: "Product", sortable: true },
-    { key: "category", header: "Category", sortable: true },
+  const columns: Column<StockLevelDisplay>[] = [
+    { key: "productSku", header: "SKU", sortable: true },
+    { key: "productName", header: "Product", sortable: true },
+    { key: "warehouseName", header: "Warehouse", sortable: true },
+    { key: "locationCode", header: "Location", sortable: true },
     { 
-      key: "stock", 
+      key: "quantity", 
       header: "Current Stock", 
       sortable: true,
       className: "text-right",
       render: (item) => (
         <span className={cn(
-          item.stock < item.minLevel && "text-red-600 dark:text-red-400 font-medium"
+          item.quantity < item.minLevel && "text-red-600 dark:text-red-400 font-medium"
         )}>
-          {item.stock} {item.uom}
+          {item.quantity} {item.uom}
         </span>
       )
     },
@@ -65,13 +105,13 @@ export function StockLevels() {
       header: "Value", 
       sortable: true,
       className: "text-right",
-      render: (item) => `$${(item.stock * item.price).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+      render: (item) => `$${(item.quantity * item.costPrice).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
     },
     { 
       key: "status", 
       header: "Status",
       render: (item) => {
-        if (item.stock < item.minLevel) {
+        if (item.quantity < item.minLevel) {
           return (
             <div className="flex items-center gap-1 text-red-600 dark:text-red-400">
               <AlertTriangle className="h-3 w-3" />
@@ -79,7 +119,7 @@ export function StockLevels() {
             </div>
           );
         }
-        if (item.stock > item.maxLevel) {
+        if (item.quantity > item.maxLevel) {
           return <span className="text-sm text-amber-600 dark:text-amber-400">Overstock</span>;
         }
         return <span className="text-sm text-green-600 dark:text-green-400">Optimal</span>;
@@ -91,19 +131,35 @@ export function StockLevels() {
     <div>
       <PageHeader
         title="Stock Levels"
-        description="Real-time inventory overview and alerts"
+        description="Real-time inventory overview by warehouse location"
         actions={
-          <Button variant="outline" data-testid="button-export">
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
+          <div className="flex gap-2">
+            <Select value={selectedWarehouse} onValueChange={setSelectedWarehouse}>
+              <SelectTrigger className="w-48" data-testid="select-warehouse-filter">
+                <Warehouse className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="All Warehouses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Warehouses</SelectItem>
+                {warehouses.map((wh) => (
+                  <SelectItem key={wh.id} value={wh.id}>
+                    {wh.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" data-testid="button-export">
+              <Download className="h-4 w-4 mr-2" />
+              Export
+            </Button>
+          </div>
         }
       />
 
       <div className="grid md:grid-cols-4 gap-4 mb-6">
         <StatCard
-          title="Total Products"
-          value={products.length}
+          title="Stock Entries"
+          value={filteredByWarehouse.length}
           icon={Package}
         />
         <StatCard
@@ -113,7 +169,7 @@ export function StockLevels() {
         />
         <StatCard
           title="Low Stock Alerts"
-          value={lowStockProducts.length}
+          value={lowStockItems.length}
           icon={AlertTriangle}
         />
         <StatCard
@@ -126,24 +182,24 @@ export function StockLevels() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-4">
           <TabsTrigger value="all" data-testid="tab-all">
-            All ({products.length})
+            All ({filteredByWarehouse.length})
           </TabsTrigger>
           <TabsTrigger value="low" data-testid="tab-low">
-            Low Stock ({lowStockProducts.length})
+            Low Stock ({lowStockItems.length})
           </TabsTrigger>
           <TabsTrigger value="optimal" data-testid="tab-optimal">
-            Optimal ({products.filter(p => p.stock >= p.minLevel && p.stock <= p.maxLevel).length})
+            Optimal ({filteredByWarehouse.filter(sl => sl.quantity >= sl.minLevel && sl.quantity <= sl.maxLevel).length})
           </TabsTrigger>
           <TabsTrigger value="overstock" data-testid="tab-overstock">
-            Overstock ({products.filter(p => p.stock > p.maxLevel).length})
+            Overstock ({filteredByWarehouse.filter(sl => sl.quantity > sl.maxLevel).length})
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value={activeTab}>
           <DataTable
-            data={getFilteredProducts()}
+            data={getFilteredStockLevels()}
             columns={columns}
-            searchKey="name"
+            searchKey="productName"
             searchPlaceholder="Search products..."
           />
         </TabsContent>

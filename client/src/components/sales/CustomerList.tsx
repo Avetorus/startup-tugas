@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
 import { DataTable, type Column } from "@/components/layout/DataTable";
 import { StatusBadge } from "@/components/layout/StatusBadge";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -23,20 +22,43 @@ import {
 import { Plus, Download, Eye, Edit, Trash2, Users, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
-import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { exportToCSV } from "@/lib/export";
-import type { Customer } from "@shared/schema";
+import { useMockData, type Customer } from "@/lib/MockDataContext";
+
+// Display type for table
+interface CustomerDisplay {
+  id: string;
+  companyId: string;
+  code: string;
+  name: string;
+  legalName?: string;
+  email: string;
+  phone: string;
+  taxId?: string;
+  address: string;
+  city: string;
+  state: string;
+  country: string;
+  postalCode: string;
+  paymentTerms: number;
+  creditLimit: string;
+  customerType?: string;
+  isActive: boolean;
+}
 
 export function CustomerList() {
   const { activeCompany } = useAuth();
   const { toast } = useToast();
+  const { customers: globalCustomers, addCustomer, updateCustomer, deleteCustomer } = useMockData();
   const companyId = activeCompany?.id;
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [editingCustomer, setEditingCustomer] = useState<CustomerDisplay | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerDisplay | null>(null);
+  const [isPending, setIsPending] = useState(false);
+  const isLoading = false;
 
   const [formData, setFormData] = useState({
     code: "",
@@ -55,55 +77,75 @@ export function CustomerList() {
     customerType: "regular",
   });
 
-  const { data: customers = [], isLoading } = useQuery<Customer[]>({
-    queryKey: ["/api/companies", companyId, "customers"],
-    enabled: !!companyId,
-  });
+  // Map global customers to display format
+  const customers: CustomerDisplay[] = globalCustomers.map(c => ({
+    id: c.id,
+    companyId: c.companyId,
+    code: c.code,
+    name: c.name,
+    email: c.email,
+    phone: c.phone,
+    address: c.address,
+    city: c.city,
+    state: c.state,
+    country: c.country,
+    postalCode: c.postalCode,
+    paymentTerms: c.paymentTerms,
+    creditLimit: String(c.creditLimit),
+    customerType: "regular",
+    isActive: c.isActive,
+  }));
 
-  const createMutation = useMutation({
-    mutationFn: async (data: typeof formData) => {
-      const response = await apiRequest("POST", `/api/companies/${companyId}/customers`, data);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "customers"] });
-      toast({ title: "Customer created successfully" });
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsPending(true);
+    setTimeout(() => {
+      if (editingCustomer) {
+        updateCustomer(editingCustomer.id, {
+          code: formData.code,
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          address: formData.address,
+          city: formData.city,
+          state: formData.state,
+          country: formData.country,
+          postalCode: formData.postalCode,
+          paymentTerms: formData.paymentTerms,
+          creditLimit: parseFloat(formData.creditLimit) || 0,
+        });
+        toast({ title: "Customer updated successfully" });
+      } else {
+        addCustomer({
+          companyId: companyId || "comp-002",
+          code: formData.code,
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          address: formData.address,
+          city: formData.city,
+          state: formData.state,
+          country: formData.country,
+          postalCode: formData.postalCode,
+          paymentTerms: formData.paymentTerms,
+          creditLimit: parseFloat(formData.creditLimit) || 0,
+          isActive: true,
+        });
+        toast({ title: "Customer created successfully" });
+      }
+      setIsPending(false);
       setIsFormOpen(false);
-    },
-    onError: () => {
-      toast({ title: "Failed to create customer", variant: "destructive" });
-    },
-  });
+    }, 500);
+  };
 
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<Customer> }) => {
-      const response = await apiRequest("PATCH", `/api/companies/${companyId}/customers/${id}`, data);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "customers"] });
-      toast({ title: "Customer updated successfully" });
-      setIsFormOpen(false);
-    },
-    onError: () => {
-      toast({ title: "Failed to update customer", variant: "destructive" });
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/companies/${companyId}/customers/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "customers"] });
+  const handleDelete = (customerId: string) => {
+    if (confirm("Are you sure you want to delete this customer?")) {
+      deleteCustomer(customerId);
       toast({ title: "Customer deleted successfully" });
-    },
-    onError: () => {
-      toast({ title: "Failed to delete customer", variant: "destructive" });
-    },
-  });
+    }
+  };
 
-  const handleOpenForm = (customer?: Customer) => {
+  const handleOpenForm = (customer?: CustomerDisplay) => {
     if (customer) {
       setEditingCustomer(customer);
       setFormData({
@@ -144,27 +186,12 @@ export function CustomerList() {
     setIsFormOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (editingCustomer) {
-      updateMutation.mutate({ id: editingCustomer.id, data: formData });
-    } else {
-      createMutation.mutate(formData);
-    }
-  };
-
-  const handleViewCustomer = (customer: Customer) => {
+  const handleViewCustomer = (customer: CustomerDisplay) => {
     setSelectedCustomer(customer);
     setIsDetailOpen(true);
   };
 
-  const handleDelete = (customerId: string) => {
-    if (confirm("Are you sure you want to delete this customer?")) {
-      deleteMutation.mutate(customerId);
-    }
-  };
-
-  const columns: Column<Customer>[] = [
+  const columns: Column<CustomerDisplay>[] = [
     { key: "code", header: "Code", sortable: true },
     { key: "name", header: "Name", sortable: true },
     { key: "email", header: "Email", sortable: true },
@@ -464,10 +491,10 @@ export function CustomerList() {
               </Button>
               <Button 
                 type="submit" 
-                disabled={createMutation.isPending || updateMutation.isPending}
+                disabled={isPending}
                 data-testid="button-save-customer"
               >
-                {(createMutation.isPending || updateMutation.isPending) && (
+                {isPending && (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 )}
                 {editingCustomer ? "Update" : "Create"}

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
 import { DataTable, type Column } from "@/components/layout/DataTable";
 import { StatusBadge } from "@/components/layout/StatusBadge";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -24,12 +23,22 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Download, Eye, Trash2, Send, PackageCheck } from "lucide-react";
-import { useCompany } from "@/contexts/CompanyContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { PurchaseOrder, Vendor, Product, InsertPurchaseOrder } from "@shared/schema";
+import { useMockData } from "@/lib/MockDataContext";
 
-interface PurchaseOrderDisplay extends PurchaseOrder {
+// Types for display
+interface PurchaseOrderDisplay {
+  id: string;
+  companyId: string;
+  orderNumber: string;
+  vendorId: string;
+  orderDate: string;
+  expectedDate?: string;
+  status: string;
+  subtotal: string;
+  taxAmount: string;
+  total: string;
   vendorName: string;
 }
 
@@ -40,194 +49,169 @@ const poSteps = [
 ];
 
 export function PurchaseOrderList() {
-  const { activeCompany } = useCompany();
+  const { activeCompany } = useAuth();
   const { toast } = useToast();
+  const { purchaseOrders, purchaseOrderLines, vendors, products, warehouses, locations, addPurchaseOrder, addPurchaseOrderLines, updatePurchaseOrder, deletePurchaseOrder, adjustStock, addJournalEntry } = useMockData();
   const [selectedOrder, setSelectedOrder] = useState<PurchaseOrderDisplay | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [formData, setFormData] = useState({ vendorId: "" });
+  const [formLines, setFormLines] = useState<{productId: string; warehouseId: string; locationId: string; quantity: number; unitPrice: number}[]>([]);
+  const [ordersLoading] = useState(false);
+  const [isPending, setIsPending] = useState(false);
 
-  const { data: orders = [], isLoading: ordersLoading } = useQuery<PurchaseOrder[]>({
-    queryKey: ["/api/companies", activeCompany?.id, "purchase-orders"],
-    enabled: !!activeCompany?.id,
-  });
-
-  const { data: vendors = [] } = useQuery<Vendor[]>({
-    queryKey: ["/api/companies", activeCompany?.id, "vendors"],
-    enabled: !!activeCompany?.id,
-  });
-
-  const { data: products = [] } = useQuery<Product[]>({
-    queryKey: ["/api/companies", activeCompany?.id, "products"],
-    enabled: !!activeCompany?.id,
-  });
-
-  const ordersWithVendors: PurchaseOrderDisplay[] = orders.map(order => ({
-    ...order,
+  // Map global data to display format
+  const ordersWithVendors: PurchaseOrderDisplay[] = purchaseOrders.map(order => ({
+    id: order.id,
+    companyId: order.companyId,
+    orderNumber: order.orderNumber,
+    vendorId: order.vendorId,
+    orderDate: order.orderDate,
+    expectedDate: order.expectedDate,
+    status: order.status,
+    subtotal: order.subtotal.toString(),
+    taxAmount: order.taxAmount.toString(),
+    total: order.total.toString(),
     vendorName: vendors.find(v => v.id === order.vendorId)?.name || "Unknown Vendor",
   }));
 
-  const createMutation = useMutation({
-    mutationFn: async (data: Partial<InsertPurchaseOrder>) => {
-      const orderNumber = `PO-${String(Date.now()).slice(-6)}`;
-      return apiRequest("POST", `/api/companies/${activeCompany?.id}/purchase-orders`, {
-        ...data,
-        orderNumber,
-        companyId: activeCompany?.id,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "purchase-orders"] });
-      toast({ title: "Purchase order created successfully" });
-      setIsFormOpen(false);
-      setFormData({ vendorId: "" });
-    },
-    onError: () => {
-      toast({ title: "Failed to create purchase order", variant: "destructive" });
-    },
-  });
+  console.log("PurchaseOrderList render:", { purchaseOrders: purchaseOrders.length, vendors: vendors.length, ordersWithVendors: ordersWithVendors.length });
 
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<PurchaseOrder> }) => {
-      return apiRequest("PATCH", `/api/companies/${activeCompany?.id}/purchase-orders/${id}`, data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "purchase-orders"] });
-      toast({ title: "Purchase order updated successfully" });
-      setIsDetailOpen(false);
-    },
-    onError: () => {
-      toast({ title: "Failed to update purchase order", variant: "destructive" });
-    },
-  });
-
-  // Workflow mutation: Confirm/Send PO to vendor
-  const confirmPOMutation = useMutation({
-    mutationFn: async (orderId: string) => {
-      const response = await apiRequest("POST", `/api/companies/${activeCompany?.id}/purchase-orders/${orderId}/confirm`);
-      return response.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "purchase-orders"] });
-      toast({ 
-        title: "Purchase Order Sent", 
-        description: "Order has been confirmed and sent to vendor" 
-      });
-      setIsDetailOpen(false);
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to confirm PO", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
-  });
-
-  // Workflow mutation: Receive goods (creates goods receipt, updates stock, inventory journal)
-  const receiveGoodsMutation = useMutation({
-    mutationFn: async (orderId: string) => {
-      const response = await apiRequest("POST", `/api/companies/${activeCompany?.id}/purchase-orders/${orderId}/receive`);
-      return response.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "purchase-orders"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "stock-levels"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "stock-movements"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "goods-receipts"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "journal-entries"] });
-      toast({ 
-        title: "Goods Received", 
-        description: `Receipt ${data.goodsReceipt?.receiptNumber || ''} created and inventory updated` 
-      });
-      setIsDetailOpen(false);
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to receive goods", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
-  });
-
-  // Workflow mutation: Create vendor invoice/bill (creates AP invoice, AP ledger, journal entry)
-  const createBillMutation = useMutation({
-    mutationFn: async (orderId: string) => {
-      const response = await apiRequest("POST", `/api/companies/${activeCompany?.id}/purchase-orders/${orderId}/bill`);
-      return response.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "purchase-orders"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "invoices"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "ap-ledger"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "journal-entries"] });
-      toast({ 
-        title: "Vendor Bill Created", 
-        description: `Bill ${data.invoice?.invoiceNumber || ''} created and AP recorded` 
-      });
-      setIsDetailOpen(false);
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to create bill", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
-  });
-
-  const isWorkflowPending = confirmPOMutation.isPending || 
-    receiveGoodsMutation.isPending || 
-    createBillMutation.isPending;
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      return apiRequest("DELETE", `/api/companies/${activeCompany?.id}/purchase-orders/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", activeCompany?.id, "purchase-orders"] });
-      toast({ title: "Purchase order deleted successfully" });
-    },
-    onError: () => {
-      toast({ title: "Failed to delete purchase order", variant: "destructive" });
-    },
-  });
+  const isWorkflowPending = isPending;
 
   const handleViewOrder = (order: PurchaseOrderDisplay) => {
     setSelectedOrder(order);
     setIsDetailOpen(true);
   };
 
+  // Get PO lines for selected order with product details
+  const getOrderLines = () => {
+    if (!selectedOrder) return [];
+    const lines = purchaseOrderLines.filter(l => l.purchaseOrderId === selectedOrder.id);
+    return lines.map(line => {
+      const product = products.find(p => p.id === line.productId);
+      const warehouse = warehouses.find(w => w.id === line.warehouseId);
+      const location = locations.find(l => l.id === line.locationId);
+      return {
+        ...line,
+        productName: product?.name || "Unknown Product",
+        productSku: product?.sku || "",
+        warehouseName: warehouse?.name || "",
+        locationCode: location?.code || "",
+      };
+    });
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.vendorId) return;
-    createMutation.mutate({ vendorId: formData.vendorId });
+    if (!formData.vendorId || formLines.length === 0) {
+      toast({ title: "Please select a vendor and add at least one product line", variant: "destructive" });
+      return;
+    }
+    
+    setIsPending(true);
+    setTimeout(() => {
+      // Calculate totals from lines
+      const subtotal = formLines.reduce((sum, line) => sum + (line.quantity * line.unitPrice), 0);
+      const taxAmount = subtotal * 0.1; // 10% tax
+      const total = subtotal + taxAmount;
+      
+      // Create PO
+      const newOrder = addPurchaseOrder({
+        companyId: activeCompany?.id || "comp-002",
+        orderNumber: `PO-${String(Date.now()).slice(-6)}`,
+        vendorId: formData.vendorId,
+        orderDate: new Date().toISOString().split("T")[0],
+        status: "draft",
+        subtotal,
+        taxAmount,
+        total,
+      });
+      
+      // Add PO lines
+      addPurchaseOrderLines(formLines.map((line, i) => ({
+        purchaseOrderId: newOrder.id,
+        productId: line.productId,
+        warehouseId: line.warehouseId,
+        locationId: line.locationId,
+        lineNumber: i + 1,
+        quantity: line.quantity,
+        quantityReceived: 0,
+        unitPrice: line.unitPrice,
+        lineTotal: line.quantity * line.unitPrice,
+      })));
+      
+      toast({ title: "Purchase order created successfully" });
+      setIsPending(false);
+      setIsFormOpen(false);
+      setFormData({ vendorId: "" });
+      setFormLines([]);
+    }, 500);
   };
 
   const handleStatusChange = (orderId: string, newStatus: string) => {
-    // Use workflow endpoints for status transitions
-    switch (newStatus) {
-      case "ordered":
-        confirmPOMutation.mutate(orderId);
-        break;
-      case "received":
-        receiveGoodsMutation.mutate(orderId);
-        break;
-      case "billed":
-        createBillMutation.mutate(orderId);
-        break;
-      default:
-        // Fallback to simple update for non-workflow status changes
-        updateMutation.mutate({ id: orderId, data: { status: newStatus } });
-    }
-    if (selectedOrder?.id === orderId) {
-      setSelectedOrder({ ...selectedOrder, status: newStatus });
-    }
+    setIsPending(true);
+    setTimeout(() => {
+      // If receiving, increase inventory for each line item at specified location
+      if (newStatus === "received") {
+        const poLines = purchaseOrderLines.filter(l => l.purchaseOrderId === orderId);
+        let totalAmount = 0;
+        
+        poLines.forEach(line => {
+          // Use the line's warehouse/location or fall back to first warehouse/location
+          const warehouseId = line.warehouseId || warehouses[0]?.id;
+          const locationId = line.locationId || locations.find(l => l.warehouseId === warehouseId)?.id;
+          
+          if (warehouseId && locationId) {
+            adjustStock(warehouseId, locationId, line.productId, line.quantity, "PO", orderId);
+          }
+          totalAmount += line.lineTotal;
+        });
+        
+        // Create journal entry: DR Inventory, CR Accounts Payable
+        const order = purchaseOrders.find(o => o.id === orderId);
+        if (order && totalAmount > 0) {
+          addJournalEntry({
+            companyId: order.companyId,
+            date: new Date().toISOString().split("T")[0],
+            description: `Goods received - PO ${order.orderNumber}`,
+            referenceType: "PO",
+            referenceId: orderId,
+            status: "posted",
+            lines: [
+              { accountId: "acc-1200", accountCode: "1200", accountName: "Inventory", debit: totalAmount, credit: 0 },
+              { accountId: "acc-2000", accountCode: "2000", accountName: "Accounts Payable", debit: 0, credit: totalAmount },
+            ]
+          });
+        }
+      }
+      
+      updatePurchaseOrder(orderId, { status: newStatus });
+      
+      const statusMessages: Record<string, string> = {
+        ordered: "Purchase Order Sent - Order sent to vendor",
+        received: "Goods Received - Inventory updated at receiving location",
+        billed: "Vendor Bill Created - AP recorded",
+      };
+      
+      toast({ 
+        title: statusMessages[newStatus] || "Status updated",
+        description: `Order status changed to ${newStatus}` 
+      });
+      setIsPending(false);
+      setIsDetailOpen(false);
+      
+      if (selectedOrder?.id === orderId) {
+        setSelectedOrder({ ...selectedOrder, status: newStatus });
+      }
+    }, 500);
   };
 
   const handleDeleteOrder = (orderId: string) => {
-    deleteMutation.mutate(orderId);
+    if (confirm("Are you sure you want to delete this purchase order?")) {
+      deletePurchaseOrder(orderId);
+      toast({ title: "Purchase order deleted successfully" });
+    }
   };
 
   const handleExport = () => {
@@ -261,7 +245,7 @@ export function PurchaseOrderList() {
             data-testid={`button-send-${order.id}`}
           >
             <Send className="h-3 w-3 mr-1" />
-            {confirmPOMutation.isPending ? "..." : "Send"}
+            {isPending ? "..." : "Send"}
           </Button>
         );
       case "ordered":
@@ -273,7 +257,7 @@ export function PurchaseOrderList() {
             data-testid={`button-receive-${order.id}`}
           >
             <PackageCheck className="h-3 w-3 mr-1" />
-            {receiveGoodsMutation.isPending ? "..." : "Receive"}
+            {isPending ? "..." : "Receive"}
           </Button>
         );
       default:
@@ -317,7 +301,7 @@ export function PurchaseOrderList() {
               variant="ghost" 
               size="icon" 
               onClick={() => handleDeleteOrder(item.id)} 
-              disabled={deleteMutation.isPending}
+              disabled={isPending}
               data-testid={`button-delete-${item.id}`}
             >
               <Trash2 className="h-4 w-4" />
@@ -369,11 +353,11 @@ export function PurchaseOrderList() {
       />
 
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>New Purchase Order</DialogTitle>
             <DialogDescription>
-              Create a new purchase order by selecting a vendor.
+              Create a new purchase order by selecting a vendor and adding product lines.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -395,12 +379,115 @@ export function PurchaseOrderList() {
                 </SelectContent>
               </Select>
             </div>
+            
+            {/* Product Lines Section */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>Order Lines *</Label>
+                <Button type="button" size="sm" variant="outline" onClick={() => {
+                  const defaultWarehouse = warehouses[0]?.id || "";
+                  const defaultLocation = locations.find(l => l.warehouseId === defaultWarehouse)?.id || "";
+                  setFormLines([...formLines, { productId: "", warehouseId: defaultWarehouse, locationId: defaultLocation, quantity: 1, unitPrice: 0 }]);
+                }}>
+                  <Plus className="h-3 w-3 mr-1" /> Add Line
+                </Button>
+              </div>
+              
+              {formLines.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4 text-center border rounded">No lines added yet. Click "Add Line" to add products.</p>
+              ) : (
+                <div className="border rounded-md divide-y">
+                  {formLines.map((line, index) => (
+                    <div key={index} className="p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Line {index + 1}</span>
+                        <Button type="button" size="sm" variant="ghost" onClick={() => {
+                          setFormLines(formLines.filter((_, i) => i !== index));
+                        }}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="col-span-2">
+                          <Label className="text-xs">Product</Label>
+                          <Select value={line.productId} onValueChange={(val) => {
+                            const product = products.find(p => p.id === val);
+                            const newLines = [...formLines];
+                            newLines[index].productId = val;
+                            newLines[index].unitPrice = product?.costPrice || 0;
+                            setFormLines(newLines);
+                          }}>
+                            <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
+                            <SelectContent>
+                              {products.map(p => <SelectItem key={p.id} value={p.id}>{p.sku} - {p.name}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs">Warehouse</Label>
+                          <Select value={line.warehouseId} onValueChange={(val) => {
+                            const newLines = [...formLines];
+                            newLines[index].warehouseId = val;
+                            newLines[index].locationId = locations.find(l => l.warehouseId === val)?.id || "";
+                            setFormLines(newLines);
+                          }}>
+                            <SelectTrigger><SelectValue placeholder="Warehouse" /></SelectTrigger>
+                            <SelectContent>
+                              {warehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs">Location</Label>
+                          <Select value={line.locationId} onValueChange={(val) => {
+                            const newLines = [...formLines];
+                            newLines[index].locationId = val;
+                            setFormLines(newLines);
+                          }}>
+                            <SelectTrigger><SelectValue placeholder="Location" /></SelectTrigger>
+                            <SelectContent>
+                              {locations.filter(l => l.warehouseId === line.warehouseId).map(l => <SelectItem key={l.id} value={l.id}>{l.code}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs">Quantity</Label>
+                          <Input type="number" min="1" value={line.quantity} onChange={(e) => {
+                            const newLines = [...formLines];
+                            newLines[index].quantity = parseInt(e.target.value) || 1;
+                            setFormLines(newLines);
+                          }} />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Unit Price</Label>
+                          <Input type="number" step="0.01" value={line.unitPrice} onChange={(e) => {
+                            const newLines = [...formLines];
+                            newLines[index].unitPrice = parseFloat(e.target.value) || 0;
+                            setFormLines(newLines);
+                          }} />
+                        </div>
+                      </div>
+                      <div className="text-right text-sm font-medium">
+                        Line Total: ${(line.quantity * line.unitPrice).toFixed(2)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {formLines.length > 0 && (
+                <div className="text-right text-sm pt-2 border-t">
+                  <strong>Subtotal: ${formLines.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0).toFixed(2)}</strong>
+                </div>
+              )}
+            </div>
+            
             <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)} data-testid="button-cancel">
+              <Button type="button" variant="outline" onClick={() => { setIsFormOpen(false); setFormLines([]); }} data-testid="button-cancel">
                 Cancel
               </Button>
-              <Button type="submit" disabled={!formData.vendorId || createMutation.isPending} data-testid="button-create-po">
-                {createMutation.isPending ? "Creating..." : "Create PO"}
+              <Button type="submit" disabled={!formData.vendorId || formLines.length === 0 || isPending} data-testid="button-create-po">
+                {isPending ? "Creating..." : "Create PO"}
               </Button>
             </div>
           </form>
@@ -475,6 +562,36 @@ export function PurchaseOrderList() {
                   </CardContent>
                 </Card>
               </div>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Order Lines</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {getOrderLines().length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No lines for this order</p>
+                  ) : (
+                    <div className="border rounded-md divide-y">
+                      <div className="grid grid-cols-5 gap-2 p-3 bg-muted/50 text-sm font-medium">
+                        <div>SKU</div>
+                        <div>Product</div>
+                        <div className="text-right">Qty</div>
+                        <div className="text-right">Unit Price</div>
+                        <div className="text-right">Total</div>
+                      </div>
+                      {getOrderLines().map((line, index) => (
+                        <div key={index} className="grid grid-cols-5 gap-2 p-3 text-sm">
+                          <div className="text-muted-foreground">{line.productSku}</div>
+                          <div>{line.productName}</div>
+                          <div className="text-right">{line.quantity}</div>
+                          <div className="text-right">${line.unitPrice.toFixed(2)}</div>
+                          <div className="text-right">${line.lineTotal.toFixed(2)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
               <div className="flex justify-end">
                 <Button variant="outline" onClick={() => setIsDetailOpen(false)} data-testid="button-close-detail">

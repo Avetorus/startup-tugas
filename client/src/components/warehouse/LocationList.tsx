@@ -19,22 +19,48 @@ import {
 } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Plus, Download, Edit, Trash2, ArrowRightLeft } from "lucide-react";
-import { mockLocations, mockProducts } from "@/lib/mockData";
+import { useMockData, type Location } from "@/lib/MockDataContext";
+import { useToast } from "@/hooks/use-toast";
 
-type Location = typeof mockLocations[0];
+// Display type with warehouse/zone names
+interface LocationDisplay extends Location {
+  warehouseName: string;
+  zoneName: string;
+  used: number;
+}
 
 export function LocationList() {
-  const [locations, setLocations] = useState(mockLocations);
+  const { toast } = useToast();
+  const { 
+    locations, warehouses, zones, products, stockLevels,
+    addLocation, updateLocation, deleteLocation
+  } = useMockData();
+  
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isTransferOpen, setIsTransferOpen] = useState(false);
-  const [editingLocation, setEditingLocation] = useState<Location | null>(null);
+  const [editingLocation, setEditingLocation] = useState<LocationDisplay | null>(null);
 
   const [formData, setFormData] = useState({
+    warehouseId: "",
+    zoneId: "",
     code: "",
     name: "",
-    zone: "",
-    type: "bin",
+    type: "bin" as Location["type"],
     capacity: 100,
+  });
+
+  // Map locations with warehouse/zone names and calculate used capacity
+  const locationsDisplay: LocationDisplay[] = locations.map(loc => {
+    const warehouse = warehouses.find(w => w.id === loc.warehouseId);
+    const zone = zones.find(z => z.id === loc.zoneId);
+    const stockAtLoc = stockLevels.filter(s => s.locationId === loc.id);
+    const usedQty = stockAtLoc.reduce((sum, s) => sum + s.quantity, 0);
+    return {
+      ...loc,
+      warehouseName: warehouse?.name || "Unknown",
+      zoneName: zone?.name || "Unknown",
+      used: Math.min(usedQty, loc.capacity), // Cap at capacity for display
+    };
   });
 
   const [transferData, setTransferData] = useState({
@@ -44,22 +70,24 @@ export function LocationList() {
     quantity: 1,
   });
 
-  const handleOpenForm = (location?: Location) => {
+  const handleOpenForm = (location?: LocationDisplay) => {
     if (location) {
       setEditingLocation(location);
       setFormData({
+        warehouseId: location.warehouseId,
+        zoneId: location.zoneId,
         code: location.code,
         name: location.name,
-        zone: location.zone,
         type: location.type,
         capacity: location.capacity,
       });
     } else {
       setEditingLocation(null);
       setFormData({
+        warehouseId: warehouses[0]?.id || "",
+        zoneId: "",
         code: "",
         name: "",
-        zone: "",
         type: "bin",
         capacity: 100,
       });
@@ -70,39 +98,53 @@ export function LocationList() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingLocation) {
-      setLocations(locations.map(l => 
-        l.id === editingLocation.id ? { ...l, ...formData } : l
-      ));
-      console.log("Updated location:", editingLocation.id);
+      updateLocation(editingLocation.id, {
+        warehouseId: formData.warehouseId,
+        zoneId: formData.zoneId,
+        code: formData.code,
+        name: formData.name,
+        type: formData.type,
+        capacity: formData.capacity,
+      });
+      toast({ title: "Location updated successfully" });
     } else {
-      // todo: remove mock functionality
-      const newLocation: Location = {
-        id: `LOC-${String(locations.length + 1).padStart(3, "0")}`,
-        used: 0,
-        ...formData,
-      };
-      setLocations([...locations, newLocation]);
-      console.log("Created location:", newLocation);
+      addLocation({
+        companyId: "comp-002",
+        warehouseId: formData.warehouseId,
+        zoneId: formData.zoneId,
+        code: formData.code,
+        name: formData.name,
+        type: formData.type,
+        capacity: formData.capacity,
+        isActive: true,
+      });
+      toast({ title: "Location created successfully" });
     }
     setIsFormOpen(false);
   };
 
   const handleTransfer = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Transfer:", transferData);
+    toast({ title: "Stock transferred successfully" });
     setIsTransferOpen(false);
     setTransferData({ productId: "", fromLocation: "", toLocation: "", quantity: 1 });
   };
 
-  const handleDeleteLocation = (locationId: string) => {
-    setLocations(locations.filter(l => l.id !== locationId));
-    console.log("Deleted location:", locationId);
+  const handleDeleteLoc = (locationId: string) => {
+    if (confirm("Are you sure you want to delete this location?")) {
+      deleteLocation(locationId);
+      toast({ title: "Location deleted successfully" });
+    }
   };
 
-  const columns: Column<Location>[] = [
+  // Get zones for selected warehouse
+  const zonesForWarehouse = zones.filter(z => z.warehouseId === formData.warehouseId);
+
+  const columns: Column<LocationDisplay>[] = [
     { key: "code", header: "Code", sortable: true },
+    { key: "warehouseName", header: "Warehouse", sortable: true },
+    { key: "zoneName", header: "Zone", sortable: true },
     { key: "name", header: "Name", sortable: true },
-    { key: "zone", header: "Zone", sortable: true },
     { key: "type", header: "Type", sortable: true },
     { 
       key: "capacity", 
@@ -129,7 +171,7 @@ export function LocationList() {
           <Button variant="ghost" size="icon" onClick={() => handleOpenForm(item)} data-testid={`button-edit-${item.id}`}>
             <Edit className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" onClick={() => handleDeleteLocation(item.id)} data-testid={`button-delete-${item.id}`}>
+          <Button variant="ghost" size="icon" onClick={() => handleDeleteLoc(item.id)} data-testid={`button-delete-${item.id}`}>
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
@@ -161,7 +203,7 @@ export function LocationList() {
       />
 
       <DataTable
-        data={locations}
+        data={locationsDisplay}
         columns={columns}
         searchKey="name"
         searchPlaceholder="Search locations..."
@@ -175,6 +217,43 @@ export function LocationList() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
+                <Label htmlFor="warehouse">Warehouse *</Label>
+                <Select
+                  value={formData.warehouseId}
+                  onValueChange={(value) => setFormData({ ...formData, warehouseId: value, zoneId: "" })}
+                >
+                  <SelectTrigger data-testid="select-warehouse">
+                    <SelectValue placeholder="Select warehouse" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {warehouses.map((wh) => (
+                      <SelectItem key={wh.id} value={wh.id}>
+                        {wh.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="zone">Zone *</Label>
+                <Select
+                  value={formData.zoneId}
+                  onValueChange={(value) => setFormData({ ...formData, zoneId: value })}
+                  disabled={!formData.warehouseId}
+                >
+                  <SelectTrigger data-testid="select-zone">
+                    <SelectValue placeholder="Select zone" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {zonesForWarehouse.map((z) => (
+                      <SelectItem key={z.id} value={z.id}>
+                        {z.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="code">Location Code *</Label>
                 <Input
                   id="code"
@@ -186,16 +265,6 @@ export function LocationList() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="zone">Zone</Label>
-                <Input
-                  id="zone"
-                  value={formData.zone}
-                  onChange={(e) => setFormData({ ...formData, zone: e.target.value })}
-                  placeholder="e.g., Zone A"
-                  data-testid="input-zone"
-                />
-              </div>
-              <div className="col-span-2 space-y-2">
                 <Label htmlFor="name">Name *</Label>
                 <Input
                   id="name"
@@ -209,7 +278,7 @@ export function LocationList() {
                 <Label htmlFor="type">Type</Label>
                 <Select
                   value={formData.type}
-                  onValueChange={(value) => setFormData({ ...formData, type: value })}
+                  onValueChange={(value) => setFormData({ ...formData, type: value as Location["type"] })}
                 >
                   <SelectTrigger data-testid="select-type">
                     <SelectValue />
@@ -219,6 +288,7 @@ export function LocationList() {
                     <SelectItem value="rack">Rack</SelectItem>
                     <SelectItem value="shelf">Shelf</SelectItem>
                     <SelectItem value="bulk">Bulk Storage</SelectItem>
+                    <SelectItem value="floor">Floor</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -262,9 +332,9 @@ export function LocationList() {
                   <SelectValue placeholder="Select product" />
                 </SelectTrigger>
                 <SelectContent>
-                  {mockProducts.map((product) => (
+                  {products.map((product) => (
                     <SelectItem key={product.id} value={product.id}>
-                      {product.name} ({product.stock} available)
+                      {product.name} ({product.stockQuantity} available)
                     </SelectItem>
                   ))}
                 </SelectContent>

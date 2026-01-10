@@ -33,7 +33,7 @@ const STORAGE_KEY_COMPANY = "unanza_active_company";
 const STORAGE_KEY_USER = "unanza_user_id";
 
 // Default admin user for demo purposes
-const DEFAULT_USER_ID = "user-admin";
+const DEFAULT_USER_ID = "e776519a-504e-4eee-8b2f-8b40f1d9b2a0";
 const DEFAULT_COMPANY_ID = "comp-holding";
 
 interface CompanyProviderProps {

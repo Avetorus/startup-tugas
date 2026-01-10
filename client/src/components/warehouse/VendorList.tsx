@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
 import { DataTable, type Column } from "@/components/layout/DataTable";
 import { StatusBadge } from "@/components/layout/StatusBadge";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -23,20 +22,62 @@ import {
 import { Plus, Download, Eye, Edit, Trash2, Building2, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
-import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { exportToCSV } from "@/lib/export";
-import type { Vendor } from "@shared/schema";
+import { useMockData, type Vendor as GlobalVendor } from "@/lib/MockDataContext";
+
+// Vendor display type matching the component's existing structure
+interface VendorDisplay {
+  id: string;
+  companyId: string;
+  code: string;
+  name: string;
+  legalName?: string;
+  email?: string;
+  phone?: string;
+  taxId?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  postalCode?: string;
+  paymentTerms: number;
+  vendorType: string;
+  isActive: boolean;
+}
 
 export function VendorList() {
   const { activeCompany } = useAuth();
   const { toast } = useToast();
+  const { vendors: globalVendors, addVendor, updateVendor, deleteVendor } = useMockData();
   const companyId = activeCompany?.id;
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
-  const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
+  const [editingVendor, setEditingVendor] = useState<VendorDisplay | null>(null);
+  const [selectedVendor, setSelectedVendor] = useState<VendorDisplay | null>(null);
+  const [isLoading] = useState(false);
+  const [isPending, setIsPending] = useState(false);
+
+  // Map global vendors to display format
+  const vendors: VendorDisplay[] = globalVendors.map(v => ({
+    id: v.id,
+    companyId: v.companyId,
+    code: v.code,
+    name: v.name,
+    legalName: v.legalName,
+    email: v.email,
+    phone: v.phone,
+    taxId: v.taxId,
+    address: v.address,
+    city: v.city,
+    state: v.state,
+    country: v.country,
+    postalCode: v.postalCode,
+    paymentTerms: v.paymentTerms,
+    vendorType: v.vendorType,
+    isActive: v.isActive,
+  }));
 
   const [formData, setFormData] = useState({
     code: "",
@@ -54,55 +95,7 @@ export function VendorList() {
     vendorType: "regular",
   });
 
-  const { data: vendors = [], isLoading } = useQuery<Vendor[]>({
-    queryKey: ["/api/companies", companyId, "vendors"],
-    enabled: !!companyId,
-  });
-
-  const createMutation = useMutation({
-    mutationFn: async (data: typeof formData) => {
-      const response = await apiRequest("POST", `/api/companies/${companyId}/vendors`, data);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "vendors"] });
-      toast({ title: "Vendor created successfully" });
-      setIsFormOpen(false);
-    },
-    onError: () => {
-      toast({ title: "Failed to create vendor", variant: "destructive" });
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<Vendor> }) => {
-      const response = await apiRequest("PATCH", `/api/companies/${companyId}/vendors/${id}`, data);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "vendors"] });
-      toast({ title: "Vendor updated successfully" });
-      setIsFormOpen(false);
-    },
-    onError: () => {
-      toast({ title: "Failed to update vendor", variant: "destructive" });
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/companies/${companyId}/vendors/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/companies", companyId, "vendors"] });
-      toast({ title: "Vendor deleted successfully" });
-    },
-    onError: () => {
-      toast({ title: "Failed to delete vendor", variant: "destructive" });
-    },
-  });
-
-  const handleOpenForm = (vendor?: Vendor) => {
+  const handleOpenForm = (vendor?: VendorDisplay) => {
     if (vendor) {
       setEditingVendor(vendor);
       setFormData({
@@ -143,25 +136,63 @@ export function VendorList() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingVendor) {
-      updateMutation.mutate({ id: editingVendor.id, data: formData });
-    } else {
-      createMutation.mutate(formData);
-    }
+    setIsPending(true);
+    setTimeout(() => {
+      if (editingVendor) {
+        updateVendor(editingVendor.id, {
+          code: formData.code,
+          name: formData.name,
+          legalName: formData.legalName,
+          email: formData.email,
+          phone: formData.phone,
+          taxId: formData.taxId,
+          address: formData.address,
+          city: formData.city,
+          state: formData.state,
+          country: formData.country,
+          postalCode: formData.postalCode,
+          paymentTerms: formData.paymentTerms,
+          vendorType: formData.vendorType,
+        });
+        toast({ title: "Vendor updated successfully" });
+      } else {
+        addVendor({
+          companyId: companyId || "comp-002",
+          code: formData.code,
+          name: formData.name,
+          legalName: formData.legalName,
+          email: formData.email,
+          phone: formData.phone,
+          taxId: formData.taxId,
+          address: formData.address,
+          city: formData.city,
+          state: formData.state,
+          country: formData.country,
+          postalCode: formData.postalCode,
+          paymentTerms: formData.paymentTerms,
+          vendorType: formData.vendorType,
+          isActive: true,
+        });
+        toast({ title: "Vendor created successfully" });
+      }
+      setIsPending(false);
+      setIsFormOpen(false);
+    }, 500);
   };
 
-  const handleViewVendor = (vendor: Vendor) => {
+  const handleViewVendor = (vendor: VendorDisplay) => {
     setSelectedVendor(vendor);
     setIsDetailOpen(true);
   };
 
   const handleDelete = (vendorId: string) => {
     if (confirm("Are you sure you want to delete this vendor?")) {
-      deleteMutation.mutate(vendorId);
+      deleteVendor(vendorId);
+      toast({ title: "Vendor deleted successfully" });
     }
   };
 
-  const columns: Column<Vendor>[] = [
+  const columns: Column<VendorDisplay>[] = [
     { key: "code", header: "Code", sortable: true },
     { key: "name", header: "Name", sortable: true },
     { key: "email", header: "Email", sortable: true },
@@ -445,10 +476,10 @@ export function VendorList() {
               </Button>
               <Button 
                 type="submit" 
-                disabled={createMutation.isPending || updateMutation.isPending}
+                disabled={isPending}
                 data-testid="button-save-vendor"
               >
-                {(createMutation.isPending || updateMutation.isPending) && (
+                {isPending && (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 )}
                 {editingVendor ? "Update" : "Create"}

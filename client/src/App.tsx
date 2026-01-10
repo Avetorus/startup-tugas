@@ -7,6 +7,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { CompanyProvider } from "@/contexts/CompanyContext";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { MockDataProvider } from "@/lib/MockDataContext";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { CompanySwitcher } from "@/components/CompanySwitcher";
 import { AppSidebar } from "@/components/layout/AppSidebar";
@@ -138,35 +139,37 @@ function ProtectedRoutes() {
   );
 }
 
-function AuthenticatedApp() {
+function AuthenticatedApp() { // main app
   const style = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "3rem",
   };
 
   return (
-    <CompanyProvider>
-      <SidebarProvider style={style as React.CSSProperties}>
-        <div className="flex h-screen w-full">
-          <AppSidebar />
-          <div className="flex flex-col flex-1 min-w-0">
-            <header className="flex items-center justify-between gap-2 p-3 border-b shrink-0">
-              <div className="flex items-center gap-2">
-                <SidebarTrigger data-testid="button-sidebar-toggle" />
-                <CompanySwitcher />
-              </div>
-              <div className="flex items-center gap-2">
-                <ThemeToggle />
-                <UserMenu />
-              </div>
-            </header>
-            <main className="flex-1 overflow-auto p-6">
-              <ProtectedRoutes />
-            </main>
+    <MockDataProvider>
+      <CompanyProvider> {/* x */}
+        <SidebarProvider style={style as React.CSSProperties}>
+          <div className="flex h-screen w-full">
+            <AppSidebar />
+            <div className="flex flex-col flex-1 min-w-0">
+              <header className="flex items-center justify-between gap-2 p-3 border-b shrink-0">
+                <div className="flex items-center gap-2">
+                  <SidebarTrigger data-testid="button-sidebar-toggle" />
+                  <CompanySwitcher /> {/* x */}
+                </div>
+                <div className="flex items-center gap-2">
+                  <ThemeToggle />
+                  <UserMenu />
+                </div>
+              </header>
+              <main className="flex-1 overflow-auto p-6">
+                <ProtectedRoutes /> 
+              </main>
+            </div>
           </div>
-        </div>
-      </SidebarProvider>
-    </CompanyProvider>
+        </SidebarProvider>
+      </CompanyProvider>
+    </MockDataProvider>
   );
 }
 
@@ -221,11 +224,11 @@ function AppRouter() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <AuthProvider>
-          <TooltipProvider>
+      <ThemeProvider> {/* ui */}
+        <AuthProvider> {/* 90% */}
+          <TooltipProvider> {/* ui */}
             <AppRouter />
-            <Toaster />
+            <Toaster /> {/* ui */}
           </TooltipProvider>
         </AuthProvider>
       </ThemeProvider>
